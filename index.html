@@ -9,6 +9,9 @@
 <meta name="apple-mobile-web-app-title" content="Hourbook">
 <meta name="theme-color" content="#F6F3ED">
 <title>Hourbook</title>
+<link rel="apple-touch-icon" href="./icon-180.png">
+<link rel="icon" type="image/png" sizes="512x512" href="./icon-512.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
 <style>
 :root{
   color-scheme:light;
@@ -192,14 +195,16 @@ nav button.on .g{opacity:1}
 .tlabels i{width:26px;flex:none}
 
 .durs{padding:10px 0 12px;border-bottom:1px solid var(--rule)}
-.durs .dur{display:flex;align-items:center;gap:10px;margin:6px 0}
-.durs .dur label{flex:1;font-size:14.5px}
-.durs .dur input{
-  width:88px;flex:none;height:42px;text-align:center;font-size:19px;letter-spacing:.04em;
-  background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:0;
+.dbox{display:flex;align-items:center;gap:10px;margin:2px 0 0}
+.dbox input{
+  flex:1 1 0;min-width:0;width:100%;
+  height:48px;text-align:center;font-size:21px;letter-spacing:.04em;
+  background:var(--panel);border:1px solid var(--rule);border-radius:11px;padding:0;
 }
-.durs .dur input:focus{outline:none;border-color:var(--amber);background:#FFF8EE;box-shadow:0 0 0 3px rgba(167,95,7,.12)}
-.durs .wt{display:flex;align-items:baseline;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--rule)}
+.dbox input:focus{outline:none;border-color:var(--amber);background:#FFF8EE;box-shadow:0 0 0 3px rgba(167,95,7,.12)}
+.dlabels{display:flex;gap:10px;font-size:12.5px;color:var(--dim);margin-top:2px}
+.dlabels span{flex:1;text-align:center}
+.durs .wt{display:flex;align-items:baseline;gap:10px;margin-top:12px;padding-top:10px;border-top:1px solid var(--rule)}
 .durs .wt .nm{flex:1;font-size:14.5px}
 .durs .wt .vv{font-size:17px;font-weight:600;color:var(--amber)}
 .durs .wt .vv.guess{color:var(--dim);font-weight:400;font-size:14.5px}
@@ -213,6 +218,18 @@ input[type=range]::-webkit-slider-thumb{
 }
 input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--panel-2)}
 input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;background:var(--amber);border:3px solid #fff}
+
+#tab-more details{border-bottom:1px solid var(--rule)}
+#tab-more summary{
+  list-style:none;cursor:pointer;padding:15px 0;
+  font-size:12.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);
+  display:flex;align-items:center;justify-content:space-between;
+}
+#tab-more summary::-webkit-details-marker{display:none}
+#tab-more summary::after{content:"+";font-size:17px;letter-spacing:0;color:var(--dim)}
+#tab-more details[open]>summary::after{content:"\2212"}
+#tab-more .fold{padding-bottom:14px}
+#tab-more details h2{display:none}
 
 .rest{padding:12px 0;border-bottom:1px solid var(--rule)}
 .rest .top{display:flex;align-items:baseline;gap:10px}
@@ -331,7 +348,9 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
   </section>
 
   <section id="tab-more" class="hidden">
-    <h2>Backup</h2>
+    <details open>
+      <summary>Backup</summary>
+      <div class="fold">
     <button class="btn" id="expJson">Download backup file</button>
     <button class="btn" id="impJson">Restore from backup</button>
     <input type="file" id="fileIn" accept=".json,application/json" class="hidden">
@@ -347,22 +366,46 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
       </select>
     </div>
     <p class="note" id="bkNote"></p>
+      </div>
+    </details>
 
-    <h2>Export</h2>
+    <details>
+      <summary>Export</summary>
+      <div class="fold">
     <button class="btn" id="expCsv">Download every day as CSV</button>
     <button class="btn" id="copyCsv">Copy CSV to clipboard</button>
     <p class="note">The CSV opens straight in Numbers or Excel — one row per day, with hours, allowances, the pay worked out and whatever the payslip said. It is for reading, not for restoring — use the backup file above for that.</p>
-    <h2>Rates</h2>
-    <div id="setRates"></div>
-    <h2>Deductions</h2>
-    <div id="setDed"></div>
-    <h2>Bank holidays</h2>
+      </div>
+    </details>
+
+    <details>
+      <summary>Rates</summary>
+      <div class="fold"><div id="setRates"></div></div>
+    </details>
+
+    <details>
+      <summary>Deductions</summary>
+      <div class="fold">
+        <div id="setDed"></div>
+        <p class="note">The pension is 5% of qualifying earnings — hours and SSP, but not night out, meal or the attendance allowance — and only the slice between the two limits. National Insurance is the main rate up to the upper limit, then the lower rate above it.</p>
+      </div>
+    </details>
+
+    <details>
+      <summary>Bank holidays</summary>
+      <div class="fold">
     <button class="btn" id="bhCheck">Check gov.uk now</button>
     <p class="note" id="bhNote"></p>
+      </div>
+    </details>
 
-    <h2>Everything else</h2>
+    <details>
+      <summary>Everything else</summary>
+      <div class="fold">
     <button class="btn danger" id="wipe">Erase all data</button>
     <p class="note" id="verNote"></p>
+      </div>
+    </details>
   </section>
 </main>
 
@@ -454,10 +497,10 @@ const DEFAULTS = {
   bhHours:10,
   holHours:10,
   backupWeeks:2,
-  pension:42.35,
+  pensionRate:5, pensionLower:120.00, pensionUpper:967.00,
   bik:1.15,
   taxRate:20, taxFree:241.73,
-  niRate:8, niFree:242.00
+  niRate:8, niFree:242.00, niUpper:967.00, niRate2:2
 };
 
 /* ============ storage ============ */
@@ -531,6 +574,7 @@ function hm(m){
 const dec = m => m/60;
 const money = n => "£"+Number(n||0).toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2});
 const n2 = n => Number(n||0).toFixed(2);
+const r2 = n => Math.round(n*100)/100;
 const num = v => (v===undefined||v===null||v==="") ? null : Number(v);
 
 /* ============ rest, worked out from the clock ============ */
@@ -692,7 +736,7 @@ function calc(monKey, skip){
   const attEarned=attMissed.length===0;
   const attPay=attEarned?S("attendance"):0;
   const ssp=Number(wk.ssp)||0;
-  const pension=S("pension");
+
 
   const L=[];
   const push=(key,name,units,cash)=>{ if(cash) L.push({key,name,units,cash}); };
@@ -706,12 +750,25 @@ function calc(monKey, skip){
   push("att","Attendance allowance","",attPay);
   push("ssp","SSP","",ssp);
 
+  /* pension is salary sacrifice on QUALIFYING EARNINGS, not on everything.
+     hours-based pay and SSP count; night out, meal and the attendance
+     allowance do not. it is then banded — nothing on the first 120 a week,
+     nothing above 967. that is why it moves week to week and tops out
+     at 42.35. */
+  const pensionable=basicPay+holPay+otPay+satPay+sunPay+bhwPay+ssp;
+  const qual=Math.max(0,Math.min(pensionable,S("pensionUpper"))-S("pensionLower"));
+  const pension=r2(qual*S("pensionRate")/100);
+
   const beforePension=basicPay+holPay+otPay+satPay+sunPay+bhwPay+nightPay+mealPay+attPay+ssp;
   const cash=beforePension-pension;
   const taxable=cash+S("bik")-nightPay-mealPay;
   const tax=Math.max(0,taxable-S("taxFree"))*S("taxRate")/100;
   const niable=taxable-S("bik");
-  const ni=Math.max(0,niable-S("niFree"))*S("niRate")/100;
+  /* NI is 8% between the threshold and the upper earnings limit, then 2%
+     above it. leaving the upper band out was what made it read high. */
+  const niMain=Math.max(0,Math.min(niable,S("niUpper"))-S("niFree"))*S("niRate")/100;
+  const niUp=Math.max(0,niable-S("niUpper"))*S("niRate2")/100;
+  const ni=r2(niMain+niUp);
   const net=cash-tax-ni;
 
   return {
@@ -719,7 +776,7 @@ function calc(monKey, skip){
     holDays, holMins,
     workedMins, paidMins:basicMins+otMins+satPaid+sunPaid+bhWorkedPaid,
     basicMins, basicWorked, holBasic, otMins, satPaid, sunPaid,
-    beforePension, pension, cash, taxable, tax, ni, net,
+    beforePension, pension, pensionable, cash, taxable, tax, ni, net,
     driveMins, extDrive, redRest, shortRest, assumedDrive,
     wtdMins, wtdDays, wtdMissing,
     attEarned, attMissed, attPending, attPay,
@@ -812,6 +869,20 @@ function lastPaidWeek(){
 }
 
 /* ============ header + hero ============ */
+/* take-home so far this week. with nothing logged at all it shows a dash:
+   the deductions would otherwise read as a loss on an empty week. a thin
+   week still shows its real figure, however small. */
+function heroNet(fig,sub,c){
+  if(!c.hasData){
+    fig.innerHTML="\u2014";
+    sub.textContent="nothing logged this week yet";
+    return;
+  }
+  const p=c.net.toFixed(2).split(".");
+  fig.innerHTML="\u00a3"+(+p[0]).toLocaleString("en-GB")+"<small>."+p[1]+"</small>";
+  sub.textContent="take-home this week";
+}
+
 function render(){
   const c=calc(cur());
   const sun=addDays(cur(),6);
@@ -843,24 +914,17 @@ function render(){
     const r=load().days[curDay]||{}, mins=duration(r.start,r.end);
     const isBH=BH.has(curDay)&&dowIndex(curDay)<5&&mins===0;
     const isHol=!isBH&&!!r.hol&&dowIndex(curDay)<5&&mins===0;
-    if(isBH){
-      fig.innerHTML=S("bhHours")+"<small>h</small>";
-      sub.textContent="bank holiday, paid not worked";
-    }else if(isHol){
-      fig.innerHTML=S("holHours")+"<small>h</small>";
-      sub.textContent="holiday, paid not worked";
-    }else{
-      const h=Math.floor(mins/60), m=mins%60;
-      fig.innerHTML=mins?h+"<small>h "+String(m).padStart(2,"0")+"</small>":"—";
-      sub.textContent=mins?"on the clock":"nothing logged yet";
-    }
-    const add=c.beforePension-calc(cur(),curDay).beforePension;
-    const dv=driveInfo(curDay,r);
-    const rb=restBefore(curDay);
+    heroNet(fig,sub,c);
+    /* what the day itself is worth. with nothing logged this is left blank
+       rather than shown as a loss — an empty day cannot take pay away. */
+    const dayLogged = mins>0 || isBH || isHol || !!r.night;
+    const add = dayLogged ? c.beforePension-calc(cur(),curDay).beforePension : null;
+    const dayFig = isBH ? S("bhHours")+"h bank hol"
+                 : isHol ? S("holHours")+"h holiday"
+                 : mins ? hm(mins) : "—";
     strip.innerHTML=
-      "<span>rest <b>"+(rb===null?"—":hm(rb))+"</b></span>"+
-      "<span>drove <b>"+(dv.mins?dec(dv.mins).toFixed(2)+"h":"—")+"</b></span>"+
-      "<span>adds <b>"+money(add)+"</b></span>";
+      "<span>this day <b>"+dayFig+"</b></span>"+
+      "<span>adds <b>"+(add===null?"—":money(add))+"</b></span>";
   }else if(tab==="pay"){
     const pc=calc(plCur()), t=plTotals(plCur(),pc);
     const gap=t.slipPay-t.expPay, gh=t.slipH-t.expH;
@@ -882,9 +946,7 @@ function render(){
       "<span>checked <b>"+hs.checked+"</b></span>"+
       "<span>off <b>"+hs.off+"</b></span>";
   }else{
-    const p=c.net.toFixed(2).split(".");
-    fig.innerHTML="£"+(+p[0]).toLocaleString("en-GB")+"<small>."+p[1]+"</small>";
-    sub.textContent="take-home this week";
+    heroNet(fig,sub,c);
     strip.innerHTML=
       "<span>worked <b>"+hm(c.workedMins)+"</b></span>"+
       "<span>paid <b>"+hm(c.paidMins)+"</b></span>"+
@@ -971,17 +1033,16 @@ function renderDay(c){
     </div>
 
     <div class="durs">
-      <div class="dur"><label>Driving</label>
-        <input class="dv" inputmode="numeric" maxlength="4" placeholder="0000" value="${durText(durMins(r.drive))}" aria-label="Driving"></div>
-      <div class="dur"><label>Other work</label>
-        <input class="ow" inputmode="numeric" maxlength="4" placeholder="0000" value="${durText(durMins(r.other))}" aria-label="Other work"></div>
-      <div class="dur"><label>POA</label>
-        <input class="po" inputmode="numeric" maxlength="4" placeholder="0000" value="${durText(durMins(r.poa))}" aria-label="Period of availability"></div>
+      <div class="dlabels"><span>driving</span><span>other work</span></div>
+      <div class="dbox">
+        <input class="dv" inputmode="numeric" maxlength="4" placeholder="0000" value="${durText(durMins(r.drive))}" aria-label="Driving">
+        <input class="ow" inputmode="numeric" maxlength="4" placeholder="0000" value="${durText(durMins(r.other))}" aria-label="Other work">
+      </div>
       <div class="wt"><span class="nm">Working time</span>
         <span class="vv ${wi.logged?"":"guess"}">${wi.logged?hm(wi.mins):"not logged"}</span></div>
       <p class="note">${wi.logged
-        ? "Driving plus other work. POA and breaks are left out, as they should be."
-        : "Straight off the tacho, in hours and minutes — 0837 is 8h 37. Both driving and other work are needed before the week counts it."}</p>
+        ? "Driving plus other work, straight off the tacho. Breaks and POA are left out, as they should be."
+        : "Off the tacho, in hours and minutes \u2014 0837 is 8h 37. Both are needed before the week counts the day."}</p>
     </div>
 
     <div class="field">
@@ -1014,7 +1075,7 @@ function renderDay(c){
   const holBtn=box.querySelector(".hol");
   if(holBtn) holBtn.addEventListener("click",()=>set("hol",r.hol?"":true));
 
-  [["dv","drive"],["ow","other"],["po","poa"]].forEach(([cls,key])=>{
+  [["dv","drive"],["ow","other"]].forEach(([cls,key])=>{
     const el=box.querySelector("."+cls);
     if(!el) return;
     el.addEventListener("change",e=>{
@@ -1450,12 +1511,16 @@ const SETUP_RATES=[
   ["holHours","Holiday hours a day","paid, not worked, counts towards the threshold"]
 ];
 const SETUP_DED=[
-  ["pension","Pension","flat amount each week, off before tax"],
+  ["pensionRate","Pension %","of qualifying earnings, off before tax"],
+  ["pensionLower","Pension lower limit","nothing is taken below this"],
+  ["pensionUpper","Pension upper limit","nothing is taken above this"],
   ["bik","Medicash benefit","taxable but not paid in cash"],
   ["taxFree","Tax free each week","1257L spread over 52 weeks"],
   ["taxRate","Tax rate %","basic rate"],
   ["niFree","NI threshold each week","primary threshold"],
-  ["niRate","NI rate %","main employee rate"]
+  ["niRate","NI rate %","main employee rate"],
+  ["niUpper","NI upper limit","above this the rate drops"],
+  ["niRate2","NI rate above %","upper earnings rate"]
 ];
 function bhYearsLine(){
   const ys=BH.years();
