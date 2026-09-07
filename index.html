@@ -579,7 +579,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v18";
+const BUILD="v19";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -662,20 +662,39 @@ function endMs(ds,r){
   if(s===null||e===null) return null;
   return fromIso(ds).getTime()+(e<s?e+1440:e)*60000;
 }
-function restBefore(ds){
+/* Article 8(2): within each 24 hours after the end of the previous rest a new
+   daily rest must be taken, and it is the portion of that rest FALLING INSIDE
+   the 24 hours that decides whether it is full or reduced. The end of the
+   previous rest is the start of the previous shift, so the window for the rest
+   that follows a shift runs from that shift's start to 24 hours later.
+   A long shift therefore eats its own rest: 15 on and 11 off leaves only 9
+   inside the window, so it is a reduced rest and a longer break cannot undo it. */
+function restInfo(ds){
   const d=load(), st=startMs(ds,d.days[ds]||{});
   if(st===null) return null;
   for(let i=1;i<=21;i++){
-    const p=addDays(ds,-i), en=endMs(p,d.days[p]||{});
-    if(en!==null){ const m=Math.round((st-en)/60000); return m>0?m:null; }
+    const p=addDays(ds,-i), pr=d.days[p]||{}, en=endMs(p,pr);
+    if(en===null) continue;
+    const gap=Math.round((st-en)/60000);
+    if(gap<=0) return null;
+    const ps=startMs(p,pr);
+    let inWin=gap;
+    if(ps!==null) inWin=Math.max(0,Math.round((Math.min(st,ps+24*3600000)-en)/60000));
+    return { gap, inWin, capped: inWin<gap };
   }
   return null;
 }
-function restKind(m){
-  if(m===null) return "none";
-  if(m>=24*60) return "weekly";
-  if(m>=11*60) return "regular";
-  if(m>=9*60)  return "reduced";
+/* the plain gap, for the weekly-rest maths and the CSV */
+function restBefore(ds){ const i=restInfo(ds); return i?i.gap:null; }
+
+/* takes either a restInfo object or a plain number of minutes */
+function restKind(x){
+  if(x===null||x===undefined) return "none";
+  const gap = typeof x==="number" ? x : x.gap;
+  const win = typeof x==="number" ? x : (x.inWin==null?x.gap:x.inWin);
+  if(gap>=24*60) return "weekly";
+  if(win>=11*60) return "regular";
+  if(win>=9*60)  return "reduced";
   return "short";
 }
 const REST_TEXT={
@@ -683,8 +702,15 @@ const REST_TEXT={
   weekly:["","ok","More than 24 hours — that is a weekly rest, not a daily one."],
   regular:["","ok","A full daily rest. Nothing used up."],
   reduced:["","warn","A reduced daily rest. Allowed three times between weekly rests, and nothing to pay back."],
-  short:["","over","Under 9 hours. That is not a legal daily rest — check it against your tacho."]
+  short:["","over","Under 9 hours. That is not a legal daily rest — check it against your tacho."],
+  reducedCut:["","warn","A reduced daily rest. The last shift ran long enough that only part of this break falls inside the 24 hours from when it started, so it counts as reduced however long you actually rested. Three allowed between weekly rests."],
+  shortCut:["","over","The last shift ran too long. Less than 9 hours of this break falls inside the 24 hours from when that shift started, so it is not a legal daily rest — check it against your tacho."]
 };
+/* which REST_TEXT entry to show for a given restInfo */
+function restTextKey(info){
+  const k=restKind(info);
+  return (info&&info.capped&&(k==="reduced"||k==="short")) ? k+"Cut" : k;
+}
 
 /* how many reduced daily rests have been used since the last weekly rest,
    counting backwards from and including the given day */
@@ -692,7 +718,7 @@ function reducedSinceWeekly(ds){
   let n=0;
   for(let i=0;i<30;i++){
     const day=addDays(ds,-i);
-    const m=restBefore(day);
+    const m=restInfo(day);
     if(m===null) continue;
     const k=restKind(m);
     if(k==="weekly") break;
@@ -789,7 +815,7 @@ function calc(monKey, skip){
     if(wi.logged){ wtdMins+=wi.mins; wtdDays++; }
     else if(mins>0) wtdMissing++;
 
-    const k=restKind(restBefore(ds));
+    const k=restKind(restInfo(ds));
     if(k==="reduced") redRest++;
     if(k==="short") shortRest++;
   });
@@ -1212,8 +1238,8 @@ function renderDay(c){
   const worked=duration(r.start,r.end);
   const dv=driveInfo(curDay,r);
   const wi=wtdInfo(curDay,r);
-  const rb=restBefore(curDay), kind=restKind(rb);
-  const rt=REST_TEXT[kind];
+  const ri=restInfo(curDay), rb=ri?ri.gap:null, kind=restKind(ri);
+  const rt=REST_TEXT[restTextKey(ri)];
   /* holiday can only be booked on a weekday that is not already a bank holiday */
   const canHol = dowIndex(curDay)<5 && !BH.has(curDay);
 
@@ -1222,7 +1248,7 @@ function renderDay(c){
   const nineLeft=redUsed<3;
 
   /* once he has clocked out: earliest he can start again */
-  const eMs=endMs(curDay,r);
+  const eMs=endMs(curDay,r), sMsToday=startMs(curDay,r);
   let nextBlock="";
   if(eMs!==null){
     const at=ms=>{
@@ -1231,13 +1257,29 @@ function renderDay(c){
       const dayGap=Math.round((fromIso(iso(dt)).getTime()-fromIso(curDay).getTime())/86400000);
       return hhmm+(dayGap===0?" today":dayGap===1?" tomorrow":" "+shortDate(iso(dt)));
     };
-    nextBlock=`
+    /* how much rest can still land inside the 24 hours from this shift's start */
+    const avail = sMsToday===null ? Infinity : Math.round((sMsToday+24*3600000-eMs)/60000);
+    if(avail>=11*60){
+      nextBlock=`
       <h2>Earliest you can start again</h2>
       <div class="nxt">
         <div><b>${at(eMs+11*3600000)}</b><span>full 11-hour rest</span><small>nothing used up</small></div>
         <div class="${nineLeft?"":"off"}"><b>${at(eMs+9*3600000)}</b><span>reduced 9-hour rest</span>
           <small>${nineLeft?(3-redUsed)+" of 3 left":"none left"}</small></div>
       </div>`;
+    } else if(avail>=9*60){
+      nextBlock=`
+      <h2>Earliest you can start again</h2>
+      <div class="nxt">
+        <div class="${nineLeft?"":"off"}"><b>${at(eMs+9*3600000)}</b><span>reduced rest — already used</span>
+          <small>${nineLeft?(3-redUsed-1)+" of 3 left after this one":"none were left"}</small></div>
+      </div>
+      <p class="note">That shift was long enough that only ${hm(avail)} of your rest falls inside the 24 hours from when you started, so it is a reduced one whatever you do now. Sleeping longer does not put it back.</p>`;
+    } else {
+      nextBlock=`
+      <h2>Earliest you can start again</h2>
+      <p class="note over">That shift ran long enough that under 9 hours of rest can fall inside the 24 hours from when you started it, so there is no legal daily rest left in this window. Check it against your tacho.</p>`;
+    }
   }
 
   /* once he has clocked in but not out: latest he can finish */
@@ -1271,7 +1313,7 @@ function renderDay(c){
     ${r.hol&&!worked?`<p class="note" style="margin-top:14px">Booked as holiday. It pays ${S("holHours")} hours at the basic rate, counts towards the 50, and keeps your attendance allowance.</p>`:""}
     <div class="rest">
       <div class="top"><span class="nm">Rest before this shift</span>
-        <span class="vv ${rt[1]}">${rb===null?"—":hm(rb)}</span></div>
+        <span class="vv ${rt[1]}">${rb===null?"—":hm(rb)+(ri.capped?" <small>· "+hm(ri.inWin)+" counts</small>":"")}</span></div>
       <div class="note">${rt[2]}</div>
     </div>
 
@@ -1812,7 +1854,7 @@ function histSummary(){
 /* ============ export ============ */
 function csv(){
   const rows=[["Date","Day","Week beginning","Payday","Start","Finish","Hours worked","Bank holiday","Holiday","Sick","Night out",
-    "Driving h","Driving assumed","Rest before (h)","Rest type",
+    "Driving h","Driving assumed","Rest before (h)","Rest in 24h window (h)","Rest type",
     "Week holiday days","Week sick days","Week basic h","Week holiday h","Week OT h","Week Sat h","Week Sun h","Week BH worked h","Week nights",
     "Week gross","Week tax","Week NI","Week net",
     "Slip hours","Expected hours","Slip before tax","Expected before tax","Slip vs expected"]];
@@ -1822,11 +1864,11 @@ function csv(){
     c.dates.forEach((ds,i)=>{
       const r=load().days[ds]||{}, mins=duration(r.start,r.end);
       const isBH=BH.has(ds)&&i<5&&mins===0;
-      const dv=driveInfo(ds,r), rb=restBefore(ds);
+      const dv=driveInfo(ds,r), ri=restInfo(ds), rb=ri?ri.gap:null;
       rows.push([ds,DAYNAME[i],k,paydayOf(k),r.start||"",r.end||"",dec(mins).toFixed(2),
         isBH?"yes":"",(r.hol&&mins===0&&i<5&&!isBH&&!r.sick)?"yes":"",(r.sick&&mins===0&&i<5&&!isBH)?"yes":"",r.night?"yes":"",
         dv.mins?dec(dv.mins).toFixed(2):"",dv.assumed?"assumed":"",
-        rb===null?"":dec(rb).toFixed(2),rb===null?"":restKind(rb),
+        rb===null?"":dec(rb).toFixed(2),rb===null?"":dec(ri.inWin).toFixed(2),rb===null?"":restKind(ri),
         i===0?c.holDays:"",i===0?c.sickDays:"",i===0?dec(c.basicWorked).toFixed(2):"",i===0?dec(c.holBasic).toFixed(2):"",i===0?dec(c.otMins).toFixed(2):"",
         i===0?dec(c.satPaid).toFixed(2):"",i===0?dec(c.sunPaid).toFixed(2):"",
         i===0?dec(c.bhWorkedPaid).toFixed(2):"",i===0?c.nights:"",

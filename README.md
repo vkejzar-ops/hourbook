@@ -23,11 +23,11 @@ This file exists so a future conversation can pick the project up cold.
 
 ## Version discipline
 
-`const BUILD="v18"` in `index.html` and `const CACHE = "hourbook-v18"` in `sw.js`
+`const BUILD="v19"` in `index.html` and `const CACHE = "hourbook-v19"` in `sw.js`
 **must be bumped together on every change.** The test `build.js` fails if they
 drift. The build number is shown in More → Everything else.
 
-Current version: **v18**.
+Current version: **v19**.
 
 ---
 
@@ -124,6 +124,54 @@ Working time directive: 60h in a single week, 48h averaged over 17 weeks.
 availability and breaks are excluded. Clock-in-to-clock-out is *duty* time and
 is the wrong basis — so the app asks for the two tacho figures separately and
 counts a day towards the average only if both are entered.
+
+### How daily rest is judged (v19 — rewritten)
+
+Up to v18 the app simply measured the gap between one finish and the next
+start. That was wrong, and it missed the obvious case: a fifteen-hour shift
+followed by an eleven-hour break reported a full rest and used nothing up.
+
+Article 8(2) of Regulation 561/2006 does not measure the gap. It says that
+within each 24 hours after the end of the previous rest a new daily rest must
+be taken, and it is *the portion of that rest falling inside those 24 hours*
+that decides whether it is full or reduced. So the window for the rest that
+follows a shift runs from **that shift's start** to 24 hours later — the end of
+the previous rest being the moment work began.
+
+A long shift therefore eats its own rest. Fifteen on and eleven off leaves only
+nine hours inside the window, so it is a reduced rest, and sleeping longer
+afterwards cannot put it back.
+
+Implementation, all in `index.html`:
+
+- `restInfo(ds)` returns `{gap, inWin, capped}`. `gap` is the real break;
+  `inWin` is the part that lands inside the 24 hours; `capped` is true when the
+  window cut it short.
+- `restBefore(ds)` still returns the plain gap and is what the weekly-rest
+  maths and the CSV hours column use.
+- `restKind()` takes either a `restInfo` object or a plain number of minutes.
+  A gap of 24h or more is a **weekly** rest and is decided on the full gap, not
+  the windowed portion — otherwise a short shift followed by a long break would
+  be misread as an ordinary daily rest. Below that, `inWin` decides:
+  11h+ regular, 9–11h reduced, under 9h short.
+- `restTextKey()` picks the wording, so a reduction caused by shift length is
+  explained differently from one caused by a short break.
+
+Both tests now live in one calculation rather than two, so a rest that is short
+*and* window-capped counts once, not twice. The eleven-on-nine-off case still
+reports reduced exactly as before.
+
+The **"earliest you can start again"** block now looks forward at how much rest
+can still fall inside the window, and says one of three things: the normal pair
+of options; that the rest is already reduced whatever he does now; or that the
+shift ran so long no legal daily rest is left in the window at all.
+
+The **"latest you can finish"** block needed no change — 13 hours to keep a full
+rest and 15 to use a reduced one fall straight out of the same arithmetic.
+
+CSV gains a **Rest in 24h window (h)** column next to the existing rest hours.
+
+Covered by `window.js` (48 checks).
 
 ---
 
@@ -245,12 +293,13 @@ finish-time handler; the gov.uk fetch does not.
 
 ## Tests
 
-26 suites in `/home/claude/t/`, all green as of v18. Run with `node <file>.js`.
+28 suites in `/home/claude/t/`, all green as of v19. Run with `node <file>.js`.
 
 `test.js` · `hol.js` · `new2.js` · `holui.js` · `dom.js` · `hdr.js` · `imp.js` ·
 `wipe.js` · `holpay.js` · `holui2.js` · `backup.js` · `bhseed.js` · `bhapi.js` ·
 `dur.js` · `mig.js` · `pay2.js` · `ui3.js` · `ui4.js` · `gap.js` · `build.js` ·
-`att.js` · `attday.js` · `lock.js` · `bkp2.js` · `carry.js` · `carryui.js`
+`att.js` · `attday.js` · `lock.js` · `bkp2.js` · `carry.js` · `carryui.js` ·
+`sick.js` · `window.js`
 
 Other `.js` files in that directory are scratch and can be ignored.
 
@@ -267,6 +316,8 @@ Other `.js` files in that directory are scratch and can be ignored.
   `new JSDOM(html,{runScripts:"dangerously",...})`. `jsdom-global` is **not**
   installed, and jsdom resolves only from `/home/claude/t`, never from
   `/mnt/user-data/outputs`.
+- `renderDay()` takes the week's `calc()` result as an argument. Call it as
+  `renderDay(calc(mondayOf(curDay)))`, not bare, or it throws on `c.workedMins`.
 - `hm()` renders `"10h"`, not `"10h 00"`.
 - Money renders as `£140<small>.00</small>`, so regexes must allow the tag.
 
