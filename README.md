@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/31927592/README.md)
 # Hourbook
 
 An offline hours-and-pay tracker for a UK lorry driver. One self-contained HTML
@@ -24,11 +23,11 @@ This file exists so a future conversation can pick the project up cold.
 
 ## Version discipline
 
-`const BUILD="v17"` in `index.html` and `const CACHE = "hourbook-v17"` in `sw.js`
+`const BUILD="v18"` in `index.html` and `const CACHE = "hourbook-v18"` in `sw.js`
 **must be bumped together on every change.** The test `build.js` fails if they
 drift. The build number is shown in More → Everything else.
 
-Current version: **v17**.
+Current version: **v18**.
 
 ---
 
@@ -174,7 +173,7 @@ in progress, but the figures are read-only and the panel is styled provisional �
 tinted, dashed border, greyed. It unlocks itself on the payday; there is nothing
 to switch.
 
-### Carry-over (v17)
+### Carry-over (v18)
 
 A payslip line can come up short, and the money usually turns up on a *later*
 slip rather than on a corrected one. So a shortfall is remembered against its own
@@ -246,7 +245,7 @@ finish-time handler; the gov.uk fetch does not.
 
 ## Tests
 
-26 suites in `/home/claude/t/`, all green as of v17. Run with `node <file>.js`.
+26 suites in `/home/claude/t/`, all green as of v18. Run with `node <file>.js`.
 
 `test.js` · `hol.js` · `new2.js` · `holui.js` · `dom.js` · `hdr.js` · `imp.js` ·
 `wipe.js` · `holpay.js` · `holui2.js` · `backup.js` · `bhseed.js` · `bhapi.js` ·
@@ -299,3 +298,50 @@ at a time.
 One environment note: `bash_tool` calls succeed when his message arrives as
 typed or dictated text and fail during live voice. Images are also invisible
 during live voice. Say so plainly and defer the work to the next typed message.
+
+
+## Sick days (v18)
+
+A day can be marked **sick** on the Day tab. The row that held night out and
+holiday now holds three chips across.
+
+- A sick day takes no hours and is out of the hours pool entirely.
+- It does **not** save the £50 attendance allowance. His firm does not pay
+  attendance through sickness, so a sick weekday still counts as a day missed.
+  This falls out of `calc()` naturally: the attendance test excludes bank
+  holidays and booked holiday, and deliberately does not exclude sick.
+- Hours on the day override the marker — the same way they override holiday
+  and turn a bank holiday into a worked one. There is no separate override.
+- A bank holiday still beats a sick tick.
+- Holiday and sick grey each other out; night out is greyed while sick.
+- Weekends have no sick chip, matching holiday.
+
+**The rate.** `settings.sickRate` is stored as a figure **per day** and is
+blank out of the box, so nothing is predicted until he sets one. The Setup row
+takes either basis: a chip toggles between "a day" and "a week", and
+`settings.sickWeekly` records which he is looking at. A weekly figure is
+divided by five on the way in. The stored number is always daily, so nothing
+downstream needs to know which he typed. The hint carries the statutory
+figures (£123.25 a week, £24.65 a day for 2026/27) as a reference only — the
+app never sets them.
+
+**SSP.** The line is renamed **SSP (sick pay)** everywhere. `calc()` predicts
+`sickDays × sickRate`, but a figure typed into the week tab's SSP box always
+wins, because that one comes off the slip. `c.sspPred` keeps the prediction
+available alongside `c.ssp`. SSP remains pensionable.
+
+**The week list** now labels every day that has no hours, so a sick day no
+longer reads the same as a day he forgot to fill in: "Bank holiday", "Holiday",
+"Sick · £24.65 paid" (or "Sick · no rate set"), and a worked bank holiday now
+says "· bank holiday" alongside the times.
+
+**CSV** gains a per-day `Sick` column and a `Week sick days` column.
+
+Tests: `sick.js`, 75 checks.
+
+### Note on the three-day rule
+
+The three unpaid waiting days were **abolished on 6 April 2026** by the
+Employment Rights Act 2025, along with the Lower Earnings Limit test. SSP is
+payable from the first qualifying day. Do not reintroduce a waiting-day
+assumption.

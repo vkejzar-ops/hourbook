@@ -125,6 +125,9 @@ main{padding:0 16px 30px}
 .pair .pf .chip{display:block;width:100%;text-align:center}
 .pair .pf .hint{display:block;font-size:12.5px;color:var(--dim);margin-top:6px}
 .pair .pf.off .lb,.pair .pf.off .hint{color:var(--rule)}
+.pair.three{gap:7px}
+.pair.three .pf .chip{padding:0 6px;font-size:14.5px}
+.pair.three .pf .hint{font-size:12px}
 .bhtag{font-size:13px;color:var(--amber);margin-top:8px}
 .extra{display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap}
 .extra label{font-size:13px;color:var(--dim)}
@@ -156,6 +159,8 @@ main{padding:0 16px 30px}
   border:1px solid var(--rule);border-radius:8px;
 }
 .field select{text-align:left;width:140px}
+.field .sb{min-height:40px;padding:0 11px;font-size:13.5px;flex:0 0 auto}
+.field .si{width:88px}
 .field input:focus,.field select:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(167,95,7,.12)}
 
 /* ---- status ---- */
@@ -383,7 +388,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
     <button class="btn" id="holWeek">Book the whole week off</button>
     <p class="note" id="holNote"></p>
     <div class="field">
-      <label>SSP paid<span class="hint">type it in if it appears</span></label>
+      <label>SSP (sick pay)<span class="hint" id="sspHint">type it in if it appears</span></label>
       <input id="sspIn" inputmode="decimal" placeholder="0.00">
     </div>
     <h2>What that pays</h2>
@@ -564,6 +569,7 @@ const DEFAULTS = {
   nightOut:25.00, meal:5.00, attendance:50.00,
   bhHours:10,
   holHours:10,
+  sickRate:"",
   owedThresh:1,
   backupWeeks:2,
   pensionRate:5, pensionLower:120.00, pensionUpper:967.00,
@@ -573,7 +579,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v17";
+const BUILD="v18";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -739,7 +745,7 @@ function calc(monKey, skip){
   const dates=[]; for(let i=0;i<7;i++) dates.push(addDays(monKey,i));
   const wk=d.weeks[monKey]||{};
   let weekdayMins=0, satMins=0, sunMins=0, bhWorkedPaid=0, bhWorkedMins=0;
-  let nights=0, bhDays=0, holDays=0, workedMins=0, driveMins=0, extDrive=0;
+  let nights=0, bhDays=0, holDays=0, sickDays=0, workedMins=0, driveMins=0, extDrive=0;
   let redRest=0, shortRest=0, assumedDrive=0;
   let wtdMins=0, wtdDays=0, wtdMissing=0;
   const attMissed=[], attPending=[];
@@ -751,7 +757,12 @@ function calc(monKey, skip){
     const mins=duration(r.start,r.end);
     /* a holiday only counts on a weekday you did not work.
        if it is also a bank holiday, the bank holiday wins — never both. */
-    const onHol = i<5 && !!r.hol && mins===0 && !BH.has(ds);
+    const onHol = i<5 && !!r.hol && mins===0 && !BH.has(ds) && !r.sick;
+    /* sick pays SSP, not hours, and — unlike holiday — does NOT save the
+       attendance allowance. so it is deliberately left out of the test
+       below: a sick weekday still counts as a day missed. */
+    const onSick = i<5 && !!r.sick && mins===0 && !BH.has(ds);
+    if(onSick) sickDays++;
     workedMins+=mins;
     if(r.night) nights++;
 
@@ -810,7 +821,13 @@ function calc(monKey, skip){
      Monday's take-home claims £50 that has not been earned. */
   const attEarned=attMissed.length===0 && attPending.length===0;
   const attPay=attEarned?S("attendance"):0;
-  const ssp=Number(wk.ssp)||0;
+  /* typed figure wins — it is off the slip. with nothing typed, predict from
+     the daily rate, but only once he has set one. blank rate predicts nothing
+     rather than inventing a number he has not confirmed. */
+  const sickRate=Number(S("sickRate"))||0;
+  const sspPred=r2(sickDays*sickRate);
+  const sspTyped=(wk.ssp!==undefined && wk.ssp!=="") ? (Number(wk.ssp)||0) : null;
+  const ssp = sspTyped!==null ? sspTyped : sspPred;
 
 
   const L=[];
@@ -823,7 +840,7 @@ function calc(monKey, skip){
   push("bhw","Bank holiday worked",dec(bhWorkedPaid).toFixed(2),bhwPay);
   push("nights","Night out + meal",nights,nightPay+mealPay);
   push("att","Attendance allowance","",attPay);
-  push("ssp","SSP","",ssp);
+  push("ssp","SSP (sick pay)",sickDays?sickDays:"",ssp);
 
   /* pension is salary sacrifice on QUALIFYING EARNINGS, not on everything.
      hours-based pay and SSP count; night out, meal and the attendance
@@ -848,14 +865,14 @@ function calc(monKey, skip){
 
   return {
     dates, lines:L, nights, bhDays, bhMins, bhWorkedMins, bhWorkedPaid,
-    holDays, holMins,
+    holDays, holMins, sickDays, ssp, sspPred, sickRate,
     workedMins, paidMins:basicMins+otMins+satPaid+sunPaid+bhWorkedPaid,
     basicMins, basicWorked, holBasic, otMins, satPaid, sunPaid,
     beforePension, pension, pensionable, cash, taxable, tax, ni, net,
     driveMins, extDrive, redRest, shortRest, assumedDrive,
     wtdMins, wtdDays, wtdMissing,
     attEarned, attMissed, attPending, attPay,
-    hasData: workedMins>0 || bhDays>0 || holDays>0 || nights>0 || ssp>0
+    hasData: workedMins>0 || bhDays>0 || holDays>0 || sickDays>0 || nights>0 || ssp>0
   };
 }
 
@@ -871,7 +888,7 @@ const PL_LINES=[
   ["bhw","Bank holiday worked","h","sunRate"],
   ["nights","Night out + meal","n",null],
   ["att","Attendance allowance","yn",null],
-  ["ssp","SSP","£",null]
+  ["ssp","SSP (sick pay)","£",null]
 ];
 const PL_HOURLY=["basic","hol","ot","sat","sun","bhw"];
 function plExpected(k,c){
@@ -885,7 +902,7 @@ function plExpected(k,c){
   e.bhw   ={units:dec(c.bhWorkedPaid),   cash:dec(c.bhWorkedPaid)*S("sunRate")};
   e.nights={units:c.nights,              cash:c.nights*(S("nightOut")+S("meal"))};
   e.att   ={units:c.attEarned?1:0,       cash:c.attPay};
-  e.ssp   ={units:null,                  cash:Number(w.ssp)||0};
+  e.ssp   ={units:null,                  cash:c.ssp};
   return e;
 }
 function plActualCash(key,raw){
@@ -1129,7 +1146,7 @@ function render(){
        whichever day happens to complete the week swallows the whole £50. */
     const cx=calc(cur(),curDay);
     const dayGross = c.hasData ? (c.beforePension-c.attPay)-(cx.beforePension-cx.attPay) : null;
-    const dayLogged = mins>0 || (BH.has(curDay)&&dowIndex(curDay)<5) || !!r.hol || !!r.night;
+    const dayLogged = mins>0 || (BH.has(curDay)&&dowIndex(curDay)<5) || !!r.hol || !!r.sick || !!r.night;
     fig.className="fig two";
     fig.innerHTML=
       "<span class=\"f\"><span class=\"n\">"+(dayLogged&&dayGross!==null?money2(dayGross):"\u2014")+"</span>"+
@@ -1243,7 +1260,13 @@ function renderDay(c){
       <p class="note">The daily rest has to start within 24 hours of the last one ending, so the longer shift only works if you cut the rest after it.</p>`;
   }
 
+  const sickRate=Number(S("sickRate"))||0;
+  const sickHint = sickRate
+    ? "pays £"+n2(sickRate)+" — still a missed day for the £50"
+    : "no rate set — still a missed day for the £50";
+
   box.innerHTML=`
+    ${r.sick&&!worked?`<p class="note" style="margin-top:14px">Off sick. ${sickRate?"It pays £"+n2(sickRate)+" for the day.":"No daily rate is set, so nothing is predicted — type what the slip says on the week view."} It does <b>not</b> keep your attendance allowance.</p>`:""}
     ${isBH?`<p class="note" style="margin-top:14px">Bank holiday. Leave it blank and it pays ${S("bhHours")} hours at the basic rate. Put times in and it pays at the Sunday rate instead, minimum ${S("sunMin")} hours.</p>`:""}
     ${r.hol&&!worked?`<p class="note" style="margin-top:14px">Booked as holiday. It pays ${S("holHours")} hours at the basic rate, counts towards the 50, and keeps your attendance allowance.</p>`:""}
     <div class="rest">
@@ -1273,16 +1296,21 @@ function renderDay(c){
         : "Off the tacho, in hours and minutes \u2014 0837 is 8h 37. Both are needed before the week counts the day."}</p>
     </div>
 
-    <div class="pair">
-      <div class="pf">
+    <div class="pair${canHol?" three":""}">
+      <div class="pf${r.sick?" off":""}">
         <span class="lb">Night out</span>
-        <button class="chip nt${r.night?" on":""}">${r.night?"yes":"no"}</button>
-        <span class="hint">pays £${n2(S("nightOut")+S("meal"))} with the meal</span>
+        <button class="chip nt${r.night?" on":""}"${r.sick?" disabled":""}>${r.sick?"—":r.night?"yes":"no"}</button>
+        <span class="hint">${r.sick?"not while you are off sick":"pays £"+n2(S("nightOut")+S("meal"))+" with the meal"}</span>
       </div>
-      ${canHol?`<div class="pf${worked?" off":""}">
+      ${canHol?`<div class="pf${worked||r.sick?" off":""}">
         <span class="lb">Holiday</span>
-        <button class="chip hol${r.hol?" on":""}"${worked?" disabled":""}>${worked?"—":r.hol?"booked":"no"}</button>
-        <span class="hint">${worked?"clear the times to book it off":"pays "+S("holHours")+" hours towards the 50"}</span>
+        <button class="chip hol${r.hol?" on":""}"${worked||r.sick?" disabled":""}>${worked||r.sick?"—":r.hol?"booked":"no"}</button>
+        <span class="hint">${worked?"clear the times to book it off":r.sick?"clear the sick tick to book it":"pays "+S("holHours")+" hours towards the 50"}</span>
+      </div>
+      <div class="pf${worked||r.hol?" off":""}">
+        <span class="lb">Sick</span>
+        <button class="chip sk${r.sick?" on":""}"${worked||r.hol?" disabled":""}>${worked?"—":r.hol?"—":r.sick?"sick":"no"}</button>
+        <span class="hint">${worked?"clear the times to mark it":r.hol?"booked as holiday":sickHint}</span>
       </div>`:""}
     </div>
 
@@ -1306,6 +1334,8 @@ function renderDay(c){
   box.querySelector(".nt").addEventListener("click",()=>set("night",r.night?"":true));
   const holBtn=box.querySelector(".hol");
   if(holBtn) holBtn.addEventListener("click",()=>set("hol",r.hol?"":true));
+  const skBtn=box.querySelector(".sk");
+  if(skBtn) skBtn.addEventListener("click",()=>set("sick",r.sick?"":true));
 
   [["dv","drive"],["ow","other"]].forEach(([cls,key])=>{
     const el=box.querySelector("."+cls);
@@ -1330,12 +1360,16 @@ function renderWeek(c){
     const isBH=BH.has(ds)&&i<5;
     const b=document.createElement("button");
     b.className="wrow"+(ds===today?" today":"");
+    const isSick = !!r.sick && mins===0 && !isBH && i<5;
+    const isHol = r.hol&&mins===0&&i<5&&!r.sick;
+    /* a day with no hours should always say why, rather than reading the
+       same as one he simply forgot to fill in */
     let sub;
     if(isBH&&mins===0) sub="Bank holiday · "+S("bhHours")+"h paid";
-    else if(r.hol&&mins===0&&i<5) sub="Holiday · "+S("holHours")+"h paid";
-    else if(mins) sub=(r.start||"")+" – "+(r.end||"")+(r.night?" · night out":"");
+    else if(isHol) sub="Holiday · "+S("holHours")+"h paid";
+    else if(isSick) sub=c.sickRate?"Sick · £"+n2(c.sickRate)+" paid":"Sick · no rate set";
+    else if(mins) sub=(r.start||"")+" – "+(r.end||"")+(isBH?" · bank holiday":"")+(r.night?" · night out":"");
     else sub="not logged";
-    const isHol = r.hol&&mins===0&&i<5;
     b.innerHTML=`<span class="nm"><b>${DAYNAME[i]} <span style="font-weight:400;color:var(--dim)">${shortDate(ds)}</span></b>
       <span>${sub}</span></span>
       <span class="hrs${mins||(isBH&&mins===0)||isHol?"":" zero"}">${mins?hm(mins):(isBH?hm(S("bhHours")*60):isHol?hm(S("holHours")*60):"—")}</span>
@@ -1360,6 +1394,11 @@ function renderWeek(c){
     <div class="top"><span class="name">Attendance allowance</span><span class="val ${aCls}">${aVal}</span></div>
     <div class="note">${aNote}</div></div>`;
   document.getElementById("sspIn").value=wk.ssp||"";
+  document.getElementById("sspIn").placeholder = c.sspPred ? n2(c.sspPred) : "0.00";
+  document.getElementById("sspHint").textContent =
+    !c.sickDays ? "type it in if it appears" :
+    c.sickRate  ? c.sickDays+(c.sickDays===1?" sick day":" sick days")+" \u00d7 \u00a3"+n2(c.sickRate)+" \u2014 type what the slip says"
+                : c.sickDays+(c.sickDays===1?" sick day":" sick days")+" \u2014 no daily rate set, so type what the slip says";
 
   /* whole-week holiday button */
   const holBtn=document.getElementById("holWeek"), holNote=document.getElementById("holNote");
@@ -1772,9 +1811,9 @@ function histSummary(){
 
 /* ============ export ============ */
 function csv(){
-  const rows=[["Date","Day","Week beginning","Payday","Start","Finish","Hours worked","Bank holiday","Holiday","Night out",
+  const rows=[["Date","Day","Week beginning","Payday","Start","Finish","Hours worked","Bank holiday","Holiday","Sick","Night out",
     "Driving h","Driving assumed","Rest before (h)","Rest type",
-    "Week holiday days","Week basic h","Week holiday h","Week OT h","Week Sat h","Week Sun h","Week BH worked h","Week nights",
+    "Week holiday days","Week sick days","Week basic h","Week holiday h","Week OT h","Week Sat h","Week Sun h","Week BH worked h","Week nights",
     "Week gross","Week tax","Week NI","Week net",
     "Slip hours","Expected hours","Slip before tax","Expected before tax","Slip vs expected"]];
   weeksWithData().sort().forEach(k=>{
@@ -1785,10 +1824,10 @@ function csv(){
       const isBH=BH.has(ds)&&i<5&&mins===0;
       const dv=driveInfo(ds,r), rb=restBefore(ds);
       rows.push([ds,DAYNAME[i],k,paydayOf(k),r.start||"",r.end||"",dec(mins).toFixed(2),
-        isBH?"yes":"",(r.hol&&mins===0&&i<5&&!isBH)?"yes":"",r.night?"yes":"",
+        isBH?"yes":"",(r.hol&&mins===0&&i<5&&!isBH&&!r.sick)?"yes":"",(r.sick&&mins===0&&i<5&&!isBH)?"yes":"",r.night?"yes":"",
         dv.mins?dec(dv.mins).toFixed(2):"",dv.assumed?"assumed":"",
         rb===null?"":dec(rb).toFixed(2),rb===null?"":restKind(rb),
-        i===0?c.holDays:"",i===0?dec(c.basicWorked).toFixed(2):"",i===0?dec(c.holBasic).toFixed(2):"",i===0?dec(c.otMins).toFixed(2):"",
+        i===0?c.holDays:"",i===0?c.sickDays:"",i===0?dec(c.basicWorked).toFixed(2):"",i===0?dec(c.holBasic).toFixed(2):"",i===0?dec(c.otMins).toFixed(2):"",
         i===0?dec(c.satPaid).toFixed(2):"",i===0?dec(c.sunPaid).toFixed(2):"",
         i===0?dec(c.bhWorkedPaid).toFixed(2):"",i===0?c.nights:"",
         i===0?n2(c.cash):"",i===0?n2(c.tax):"",i===0?n2(c.ni):"",i===0?n2(c.net):"",
@@ -1849,6 +1888,7 @@ const SETUP_RATES=[
   ["attendance","Attendance allowance","full week, no days missed"],
   ["bhHours","Bank holiday hours","paid, not worked, counts towards the threshold"],
   ["holHours","Holiday hours a day","paid, not worked, counts towards the threshold"],
+  ["sickRate","Sick pay","","sick"],
   ["owedThresh","Ignore shortfalls under","hours — below this it is rounding, not a shortfall"]
 ];
 const SETUP_DED=[
@@ -1926,11 +1966,41 @@ function renderBackup(){
 }
 function prettyDate(is){ return DAYSHORT[dowIndex(is)]+" "+shortDate(is); }
 
+/* the sick rate is the one figure he may first meet as a WEEK on a slip
+   rather than a day. so the row takes either and always stores a day —
+   nothing downstream has to know which he typed. */
+function sickField(){
+  const d=load();
+  const weekly=!!d.settings.sickWeekly;
+  const daily=Number(d.settings.sickRate)||0;
+  const shown=daily?(weekly?r2(daily*5):daily):"";
+  const row=document.createElement("div");
+  row.className="field";
+  row.innerHTML=`<label>Sick pay ${weekly?"a week":"a day"}
+      <span class="hint">${daily
+        ? (weekly?"stored as \u00a3"+n2(daily)+" a day \u2014 a week over five days":"\u00a3"+n2(daily)+" for each sick day")
+        : "blank until you have seen one \u2014 statutory is \u00a3123.25 a week, \u00a324.65 a day"}</span></label>
+    <button class="chip sb">${weekly?"a week":"a day"}</button>
+    <input class="si" inputmode="decimal" placeholder="\u2014" value="${shown===""?"":n2(shown)}">`;
+  row.querySelector(".si").addEventListener("change",e=>{
+    const v=e.target.value.trim();
+    if(v===""||Number(v)===0){ delete d.settings.sickRate; }
+    else d.settings.sickRate = weekly ? r2(Number(v)/5) : r2(Number(v));
+    save(); render();
+  });
+  row.querySelector(".sb").addEventListener("click",()=>{
+    if(weekly) delete d.settings.sickWeekly; else d.settings.sickWeekly=1;
+    save(); render();
+  });
+  return row;
+}
+
 function renderSetup(){
   const d=load();
   const build=(list,el)=>{
     el.innerHTML="";
-    list.forEach(([k,name,hint])=>{
+    list.forEach(([k,name,hint,kind])=>{
+      if(kind==="sick"){ el.appendChild(sickField()); return; }
       const row=document.createElement("div");
       row.className="field";
       row.innerHTML=`<label>${name}<span class="hint">${hint.replace("{cap}",S("basicCap"))}</span></label>
