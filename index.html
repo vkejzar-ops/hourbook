@@ -306,6 +306,19 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
 .pl .unit{font-size:12.5px;color:var(--dim);width:34px}
 .pl .gap{margin-left:auto;font-size:15px;font-weight:600;text-align:right}
 .pl .sub{font-size:12.5px;color:var(--dim);margin-top:5px}
+/* a week whose payday has not arrived: tinted, dashed, greyed, inputs dead.
+   reads "not final yet" rather than "wrong" — red is kept for discrepancies. */
+.prov{background:#EFEDE8;border:1px dashed var(--rule);border-radius:12px;
+  padding:2px 13px;margin-bottom:4px}
+.prov .pl .nm,.prov .pl .exp,.prov .pl .sub,.prov .pl .gap{color:var(--dim)}
+.prov .pl .gap{font-weight:500}
+.prov .pl.has{border-left-color:var(--rule)}
+.prov input.pin{background:transparent;color:var(--dim);border-style:dashed;pointer-events:none}
+.prov input[type=range]{pointer-events:none;opacity:.5}
+.prov .ynb{pointer-events:none;opacity:.5}
+.prov .lock{display:flex;gap:7px;align-items:baseline;padding:11px 2px 4px;
+  font-size:12.5px;color:var(--dim)}
+.prov .lock b{font-weight:600;color:var(--text)}
 @media (prefers-reduced-motion:no-preference){.btn,.chip{transition:background .12s}}
 </style>
 </head>
@@ -530,7 +543,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v15";
+const BUILD="v16";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -904,6 +917,11 @@ function paydayLabel(k){
   const p=paydayOf(k);
   return "paid "+DAYSHORT[dowIndex(p)]+" "+shortDate(p);
 }
+/* a week only accepts payslip figures once its payday has been. before that
+   there is no slip in his hand to copy from, so the tab shows predictions and
+   locks the inputs. this unlocks itself on the payday — nothing to switch. */
+function plLocked(k){ return paydayOf(k) > iso(new Date()); }
+
 /* the last week whose payday has already been and gone */
 function lastPaidWeek(){
   let k=mondayOf(iso(new Date()));
@@ -954,7 +972,7 @@ function render(){
   const P=document.getElementById("prev"), N=document.getElementById("next");
   P.style.visibility = tab==="history" ? "hidden" : "visible";
   N.style.visibility = tab==="history" ? "hidden" : "visible";
-  N.disabled = tab==="pay" && plCur()>=lastPaidWeek();
+  N.disabled = tab==="pay" && plCur()>=addDays(lastPaidWeek(),7);
   N.style.opacity = N.disabled ? ".35" : "1";
 
   const fig=document.getElementById("heroFig"), sub=document.getElementById("heroSub"), strip=document.getElementById("heroStrip");
@@ -981,18 +999,24 @@ function render(){
   }else if(tab==="pay"){
     const pc=calc(plCur()), t=plTotals(plCur(),pc);
     const gap=t.slipPay-t.expPay, gh=t.slipH-t.expH;
+    /* an unpaid week has no slip to be "expected" against — say predicted */
+    const pw=plLocked(plCur())?"predicted":"expected";
     fig.className="fig two";
     fig.innerHTML=
       "<span class=\"f\"><span class=\"n\">"+money2(t.expPay)+"</span>"+
-        "<span class=\"lbl\">expected before tax</span></span>"+
+        "<span class=\"lbl\">"+pw+" before tax</span></span>"+
       "<span class=\"f r\"><span class=\"n\">"+money2(pc.net)+"</span>"+
-        "<span class=\"lbl\">expected after tax</span></span>";
+        "<span class=\"lbl\">"+pw+" after tax</span></span>";
     sub.textContent = !plHasAny(plCur()) ? ""
       : Math.abs(gap)<0.01 ? "the slip matches"
       : "£"+Math.abs(gap).toFixed(2)+" "+(gap<0?"short":"over")+" on the slip"+
         (plGapSource(plCur(),pc) ? " · "+plGapSource(plCur(),pc) : "");
     sub.style.display = sub.textContent ? "" : "none";
-    strip.innerHTML=
+    strip.innerHTML= plLocked(plCur())
+      ? "<span class=\"s\"><span class=\"v\">"+n2(t.expH)+"h</span><span class=\"k\">logged</span></span>"+
+        "<span class=\"s\"><span class=\"v\">"+pc.nights+"</span><span class=\"k\">nights</span></span>"+
+        "<span class=\"s\"><span class=\"v\">"+DAYSHORT[dowIndex(paydayOf(plCur()))]+" "+shortDate(paydayOf(plCur()))+"</span><span class=\"k\">payday</span></span>"
+      :
       "<span class=\"s\"><span class=\"v\">"+n2(t.expH)+"h"+"</span><span class=\"k\">logged</span></span>"+
       "<span class=\"s\"><span class=\"v\">"+n2(t.slipH)+"h"+"</span><span class=\"k\">on the slip</span></span>"+
       "<span class=\"s\"><span class=\"v\">"+(Math.abs(gh)<0.005?"none":(gh>0?"+":"\u2212")+n2(Math.abs(gh))+"h")+"</span><span class=\"k\">gap</span></span>";
@@ -1308,6 +1332,12 @@ function renderPayslip(c){
   const d=load(), k=plCur(), p=plSaved(k), e=plExpected(k,c);
   const box=document.getElementById("plList");
   box.innerHTML="";
+  const locked=plLocked(k);
+  box.className = locked ? "prov" : "";
+  if(locked) box.innerHTML=
+    `<div class="lock"><span>&#9432;</span><span>Predicted only &mdash; <b>not paid until `
+    + DAYSHORT[dowIndex(paydayOf(k))] + " " + shortDate(paydayOf(k))
+    + `</b>. You can look, but figures cannot be entered until the slip arrives.</span></div>`;
 
   PL_LINES.forEach(([key,label,unit,rateKey])=>{
     const exp=e[key];
@@ -1376,9 +1406,11 @@ function renderPayslip(c){
       save(); render();
     };
     const inp=row.querySelector(".pin");
-    if(inp) inp.addEventListener("change",ev=>commit(ev.target.value.trim()));
+    if(inp && locked) inp.disabled=true;
+    if(inp && !locked) inp.addEventListener("change",ev=>commit(ev.target.value.trim()));
     const rng=row.querySelector(".pr");
-    if(rng){
+    if(rng && locked) rng.disabled=true;
+    if(rng && !locked){
       const pv=row.querySelector(".pv");
       rng.addEventListener("input",ev=>{ pv.textContent=ev.target.value; });
       /* landing back on what the app already expects means "agrees", the same
@@ -1390,7 +1422,8 @@ function renderPayslip(c){
       });
     }
     const yn=row.querySelector(".ynb");
-    if(yn) yn.addEventListener("click",()=>{
+    if(yn && locked) yn.disabled=true;
+    if(yn && !locked) yn.addEventListener("click",()=>{
       const now = raw===null ? (e[key].units===1?1:0) : raw;
       commit(String(now?0:1));
     });
@@ -1429,7 +1462,11 @@ function renderPayslip(c){
   cb.style.opacity = n ? "1" : ".45";
 
   const note=document.getElementById("plNote");
-  if(!plHasAny(k))
+  if(locked)
+    note.textContent="This week has not been paid yet, so these are predictions from what you logged. On "
+      + DAYSHORT[dowIndex(paydayOf(k))] + " " + shortDate(paydayOf(k))
+      + " it unlocks by itself and you can check it against the real slip.";
+  else if(!plHasAny(k))
     note.textContent="Type the hours off each line of the payslip. Anything you leave blank is taken as agreeing with what I logged, so you only need to fill in what looks off.";
   else if(!worst.length)
     note.textContent="Every line you entered matches what I logged. Nothing to chase.";
