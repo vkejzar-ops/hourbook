@@ -530,7 +530,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v14";
+const BUILD="v15";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -762,7 +762,10 @@ function calc(monKey, skip){
   const bhwPay=dec(bhWorkedPaid)*S("sunRate");
   const nightPay=nights*S("nightOut");
   const mealPay=nights*S("meal");
-  const attEarned=attMissed.length===0;
+  /* the allowance needs every weekday covered. days still to come are not
+     "covered" yet, so it is not counted until the week is done — otherwise
+     Monday's take-home claims £50 that has not been earned. */
+  const attEarned=attMissed.length===0 && attPending.length===0;
   const attPay=attEarned?S("attendance"):0;
   const ssp=Number(wk.ssp)||0;
 
@@ -960,7 +963,11 @@ function render(){
     const r=load().days[curDay]||{}, mins=duration(r.start,r.end);
     /* today's own gross on the left, the week's take-home so far on the right.
        an empty day or an empty week shows a dash rather than a figure. */
-    const dayGross = c.hasData ? c.beforePension-calc(cur(),curDay).beforePension : null;
+    /* what the day itself is worth. the attendance allowance is a weekly
+       thing, not a day's earnings, so it is taken off both sides — otherwise
+       whichever day happens to complete the week swallows the whole £50. */
+    const cx=calc(cur(),curDay);
+    const dayGross = c.hasData ? (c.beforePension-c.attPay)-(cx.beforePension-cx.attPay) : null;
     const dayLogged = mins>0 || (BH.has(curDay)&&dowIndex(curDay)<5) || !!r.hol || !!r.night;
     fig.className="fig two";
     fig.innerHTML=
@@ -1072,6 +1079,12 @@ function renderDay(c){
   box.innerHTML=`
     ${isBH?`<p class="note" style="margin-top:14px">Bank holiday. Leave it blank and it pays ${S("bhHours")} hours at the basic rate. Put times in and it pays at the Sunday rate instead, minimum ${S("sunMin")} hours.</p>`:""}
     ${r.hol&&!worked?`<p class="note" style="margin-top:14px">Booked as holiday. It pays ${S("holHours")} hours at the basic rate, counts towards the 50, and keeps your attendance allowance.</p>`:""}
+    <div class="rest">
+      <div class="top"><span class="nm">Rest before this shift</span>
+        <span class="vv ${rt[1]}">${rb===null?"—":hm(rb)}</span></div>
+      <div class="note">${rt[2]}</div>
+    </div>
+
     <div class="bigtimes">
       <input class="st" inputmode="numeric" maxlength="4" placeholder="0000" value="${r.start||""}" aria-label="Start">
       <span class="dash">to</span>
@@ -1079,11 +1092,6 @@ function renderDay(c){
     </div>
     <div class="tlabels"><span>start</span><i></i><span>finish</span></div>
 
-    <div class="rest">
-      <div class="top"><span class="nm">Rest before this shift</span>
-        <span class="vv ${rt[1]}">${rb===null?"—":hm(rb)}</span></div>
-      <div class="note">${rt[2]}</div>
-    </div>
 
     <div class="durs">
       <div class="dlabels"><span>driving</span><span>other work</span></div>
