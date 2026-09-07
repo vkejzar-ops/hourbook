@@ -84,6 +84,8 @@ header{
 .nval{display:flex;align-items:baseline;gap:8px;margin:6px 0 2px}
 .nval .pv{font-size:26px;line-height:1;color:var(--amber)}
 .nval .k{font-size:12.5px;color:var(--dim)}
+.hero .fig.one{text-align:center}
+.hero .fig.one + .sub{text-align:center}
 .hero .fig.two{display:flex;align-items:flex-start;gap:12px}
 .hero .fig.two .f{flex:1 1 0;min-width:0}
 .hero .fig.two .f.r{text-align:right}
@@ -293,6 +295,8 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
 .pl .top{display:flex;align-items:baseline;gap:10px}
 .pl .nm{flex:1;font-size:14.5px}
 .pl .exp{font-size:12.5px;color:var(--dim)}
+.pl.has{border-left:2px solid var(--amber);padding-left:10px;margin-left:-12px}
+.pl .ent{font-style:normal;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--amber);margin-left:7px}
 .pl .bot{display:flex;align-items:center;gap:10px;margin-top:7px}
 .pl input.pin{
   width:112px;height:42px;text-align:center;font-size:17px;background:var(--panel);
@@ -526,6 +530,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
+const BUILD="v14";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -847,6 +852,21 @@ function plActualCash(key,raw){
 }
 function plSaved(k){ return (load().weeks[k]||{}).payslip||{}; }
 function plHasAny(k){ const p=plSaved(k); return Object.keys(p).some(x=>p[x]!==""&&p[x]!==undefined&&p[x]!==null); }
+/* which line the money gap actually comes from — a figure entered on a
+   line with no hours (nights, attendance, SSP) moves the pounds without
+   moving the hours, which otherwise looks like it came from nowhere */
+function plGapSource(k,c){
+  const p=plSaved(k), e=plExpected(k,c), out=[];
+  PL_LINES.forEach(([key,label])=>{
+    const raw=num(p[key]); if(raw===null) return;
+    const g=plActualCash(key,raw)-e[key].cash;
+    if(Math.abs(g)>=0.01) out.push({label,g});
+  });
+  if(!out.length) return "";
+  out.sort((a,b)=>Math.abs(b.g)-Math.abs(a.g));
+  return out.length===1 ? out[0].label.toLowerCase()
+    : out[0].label.toLowerCase()+" and "+(out.length-1)+" more";
+}
 function plTotals(k,c){
   const p=plSaved(k), e=plExpected(k,c);
   let expH=0, slipH=0, expPay=0, slipPay=0;
@@ -897,6 +917,7 @@ function lastPaidWeek(){
    the deductions would otherwise read as a loss on an empty week. a thin
    week still shows its real figure, however small. */
 function heroNet(fig,sub,c){
+  fig.className="fig one";
   if(!c.hasData){
     fig.innerHTML="\u2014";
     sub.textContent="nothing logged this week yet";
@@ -961,7 +982,8 @@ function render(){
         "<span class=\"lbl\">expected after tax</span></span>";
     sub.textContent = !plHasAny(plCur()) ? ""
       : Math.abs(gap)<0.01 ? "the slip matches"
-      : "£"+Math.abs(gap).toFixed(2)+" "+(gap<0?"short":"over")+" on the slip";
+      : "£"+Math.abs(gap).toFixed(2)+" "+(gap<0?"short":"over")+" on the slip"+
+        (plGapSource(plCur(),pc) ? " · "+plGapSource(plCur(),pc) : "");
     sub.style.display = sub.textContent ? "" : "none";
     strip.innerHTML=
       "<span class=\"s\"><span class=\"v\">"+n2(t.expH)+"h"+"</span><span class=\"k\">logged</span></span>"+
@@ -969,6 +991,7 @@ function render(){
       "<span class=\"s\"><span class=\"v\">"+(Math.abs(gh)<0.005?"none":(gh>0?"+":"\u2212")+n2(Math.abs(gh))+"h")+"</span><span class=\"k\">gap</span></span>";
   }else if(tab==="history"){
     const hs=histSummary();
+    fig.className="fig one";
     fig.innerHTML=hs.weeks+"<small> "+(hs.weeks===1?"week":"weeks")+"</small>";
     sub.textContent="logged so far";
     strip.innerHTML=
@@ -1282,13 +1305,13 @@ function renderPayslip(c){
     const exp=e[key];
     const raw=num(p[key]);
     const row=document.createElement("div");
-    row.className="pl";
+    row.className="pl"+(raw===null?"":" has");
 
     if(unit==="n"){
       const v = raw===null ? exp.units : raw;
       const g = raw===null ? null : raw-exp.units;
       row.innerHTML=`
-        <div class="top"><span class="nm">${label}</span><span class="exp">expected ${exp.units} · ${money(exp.cash)}</span></div>
+        <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">expected ${exp.units} · ${money(exp.cash)}</span></div>
         <div class="nval"><span class="pv">${v}</span><span class="k">on the slip</span></div>
         <input type="range" class="pr" min="0" max="6" step="1" value="${v}">
         <div class="sub">${
@@ -1300,7 +1323,7 @@ function renderPayslip(c){
       const paid = raw===null ? exp.units===1 : raw===1;
       const g = raw===null ? null : (raw?1:0)-exp.units;
       row.innerHTML=`
-        <div class="top"><span class="nm">${label}</span><span class="exp">expected ${exp.units?"yes":"no"} · ${money(exp.cash)}</span></div>
+        <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">expected ${exp.units?"yes":"no"} · ${money(exp.cash)}</span></div>
         <div class="bot">
           <button class="chip ynb${paid?" on":""}">${paid?"on the slip":"not on the slip"}</button>
           <span class="gap" style="color:${g===null?"var(--dim)":g===0?"var(--green)":"var(--red)"}">${
@@ -1312,7 +1335,7 @@ function renderPayslip(c){
       const gapH  = raw===null ? null : raw-exp.units;
       const gapP  = raw===null ? null : gapH*S(rateKey);
       row.innerHTML=`
-        <div class="top"><span class="nm">${label}</span><span class="exp">logged ${n2(exp.units)} h</span></div>
+        <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">logged ${n2(exp.units)} h</span></div>
         <div class="bot">
           <input class="pin" inputmode="decimal" placeholder="${n2(exp.units)}" value="${shown}">
           <span class="unit">hours</span>
@@ -1328,7 +1351,7 @@ function renderPayslip(c){
       const shown = raw===null ? "" : p[key];
       const gap = raw===null ? null : raw-exp.cash;
       row.innerHTML=`
-        <div class="top"><span class="nm">${label}</span><span class="exp">expected ${money(exp.cash)}</span></div>
+        <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">expected ${money(exp.cash)}</span></div>
         <div class="bot">
           <input class="pin" inputmode="decimal" placeholder="${n2(exp.cash)}" value="${shown}">
           <span class="unit">£</span>
@@ -1350,7 +1373,13 @@ function renderPayslip(c){
     if(rng){
       const pv=row.querySelector(".pv");
       rng.addEventListener("input",ev=>{ pv.textContent=ev.target.value; });
-      rng.addEventListener("change",ev=>commit(ev.target.value));
+      /* landing back on what the app already expects means "agrees", the same
+         as leaving a text box blank — so nothing is stored. otherwise one
+         stray drag leaves a figure behind that looks identical to no figure. */
+      rng.addEventListener("change",ev=>{
+        const v=Number(ev.target.value);
+        commit(v===exp.units ? "" : String(v));
+      });
     }
     const yn=row.querySelector(".ynb");
     if(yn) yn.addEventListener("click",()=>{
@@ -1383,6 +1412,13 @@ function renderPayslip(c){
     }
   });
   worst.sort((a,b)=>Math.abs(b.gp)-Math.abs(a.gp));
+
+  const cb=document.getElementById("plClear");
+  const n=Object.keys(p).filter(x=>p[x]!==""&&p[x]!==undefined&&p[x]!==null).length;
+  cb.textContent = n ? "Clear the "+n+" figure"+(n===1?"":"s")+" entered for this week"
+                     : "Nothing entered for this week";
+  cb.disabled = !n;
+  cb.style.opacity = n ? "1" : ".45";
 
   const note=document.getElementById("plNote");
   if(!plHasAny(k))
@@ -1639,6 +1675,7 @@ function renderSetup(){
   build(SETUP_RATES,document.getElementById("setRates"));
   build(SETUP_DED,document.getElementById("setDed"));
   document.getElementById("verNote").textContent =
+    "Build "+BUILD+". "+
     (memOnly?"Storage is blocked here, so nothing will survive a reload — it will work once it is on your phone. ":"")+
     "Everything stays on this device. Tax and NI are close but not penny-exact; the payslip is the truth.";
 }
