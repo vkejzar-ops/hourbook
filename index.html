@@ -319,6 +319,35 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
 .prov .lock{display:flex;gap:7px;align-items:baseline;padding:11px 2px 4px;
   font-size:12.5px;color:var(--dim)}
 .prov .lock b{font-weight:600;color:var(--text)}
+
+/* ---- carry-over strip ---- */
+.owetag{font-style:normal;color:var(--amber);font-weight:600;margin-left:4px}
+.strip{margin-top:8px;padding:8px 0 2px 11px;border-left:2px solid var(--amber)}
+.strip.done{border-left-color:var(--green)}
+.strip.miss{border-left-color:var(--red)}
+.strip.over{border-left-color:var(--rule)}
+.strip .sl{display:flex;align-items:center;gap:8px}
+.strip .sh{font-size:14px;font-weight:600;color:var(--amber)}
+.strip.done .sh{color:var(--green)}
+.strip.miss .sh{color:var(--red)}
+.strip.over .sh{color:var(--dim)}
+.strip .sd{font-size:12.5px;color:var(--dim);flex:1}
+.strip .sd b{color:var(--green);font-weight:600}
+.stot{font-size:12.5px;color:var(--dim);margin-top:5px;line-height:1.45}
+.stot b{color:var(--text);font-weight:600}
+.oact{display:flex;gap:8px;margin-top:8px}
+.wo{font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);
+  border:1px solid var(--rule);border-radius:7px;padding:5px 9px;margin-left:auto;background:var(--ground)}
+.wo.full{margin-left:0;color:var(--amber);border-color:var(--amber)}
+.prov .strip .wo,.prov .ckb{pointer-events:none;opacity:.5}
+
+/* ---- nights confirmation tick ---- */
+.ck{display:flex;align-items:center;gap:9px;margin-top:2px}
+.ckb{width:26px;height:26px;flex:none;border:1px solid var(--rule);border-radius:7px;
+  background:var(--ground);color:var(--rule);font-size:15px;line-height:1}
+.ckb.on{background:var(--green);border-color:var(--green);color:#FFF}
+.ckl{font-size:12.5px;color:var(--dim)}
+.ck.on .ckl{color:var(--green)}
 @media (prefers-reduced-motion:no-preference){.btn,.chip{transition:background .12s}}
 </style>
 </head>
@@ -535,6 +564,7 @@ const DEFAULTS = {
   nightOut:25.00, meal:5.00, attendance:50.00,
   bhHours:10,
   holHours:10,
+  owedThresh:1,
   backupWeeks:2,
   pensionRate:5, pensionLower:120.00, pensionUpper:967.00,
   bik:1.15,
@@ -543,7 +573,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v16";
+const BUILD="v17";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -896,6 +926,119 @@ function plTotals(k,c){
     }
   });
   return {expH, slipH, expPay, slipPay};
+}
+
+/* ============ the carry-over ledger ============
+   a payslip line can come up short, and the money usually turns up on a
+   later slip rather than on a corrected one. so a shortfall is remembered
+   against its own line and added to what the next slip should pay. it
+   rides along until a slip covers it or he writes it off — it does not
+   expire, because a debt does not stop existing just because time passed.
+
+   an overpayment is the mirror, but deliberately not symmetric: it is
+   noted, it lives exactly one week, and it needs no tick. if next week's
+   slip comes up short by the same amount on the same line, that is them
+   taking it back and it is absorbed silently. if it does not, it was his.
+
+   everything is carried in the line's own unit — hours for the hourly
+   lines, whole nights for the night out line, pounds for attendance —
+   so a rate change between the two weeks cannot corrupt it. */
+
+const PL_CARRY = ["basic","hol","ot","sat","sun","bhw","nights","att"];
+const PL_BACK  = 52;
+
+/* the 1-hour floor exists because overtime is rounded to quarter hours and
+   a stray 0.25 is arithmetic, not a shortfall. it is meaningless on the
+   count lines: a missing night out is a whole £30 and can never be rounding,
+   so nights and attendance carry any gap at all. */
+function plThresh(unit){ return unit==="h" ? S("owedThresh") : 0; }
+
+function plBlank(){ return {owed:0, from:null, credit:0}; }
+
+/* walking every week back a year would mean a year of calc() calls on every
+   render. nothing can be owed before the first week he ever entered a slip
+   for, so start there. */
+function plCarryStart(k){
+  const d=load(), lim=addDays(k,-7*PL_BACK);
+  let first=null;
+  Object.keys(d.weeks).forEach(w=>{
+    if(w<lim || w>=k) return;
+    const wk=d.weeks[w];
+    if(wk.payslip || wk.wo || wk.chk || wk.att2){ if(!first || w<first) first=w; }
+  });
+  return first;
+}
+
+/* what is outstanding coming INTO week k */
+function plCarryIn(k){
+  const first=plCarryStart(k);
+  if(!first) return {};
+  let st={};
+  for(let w=first; w<k; w=addDays(w,7)) st=plStep(w,st);
+  return st;
+}
+
+/* one week's effect on the ledger. takes what was owed coming in,
+   returns what is owed going out. */
+function plStep(w,inSt){
+  const d=load(), wk=d.weeks[w]||{}, p=wk.payslip||{}, wo=wk.wo||{}, chk=wk.chk||{};
+  const out={};
+  /* an unpaid week carries no slip, so it says nothing about a debt. it
+     passes shortfalls through untouched and lets any credit lapse. */
+  const locked=plLocked(w);
+  const e = locked ? null : plExpected(w,calc(w));
+
+  PL_LINES.forEach(([key,label,unit,rateKey])=>{
+    if(PL_CARRY.indexOf(key)<0) return;
+    const inn = inSt[key] || plBlank();
+    let owed = inn.owed, from = inn.from;
+    const credit = inn.credit;
+
+    /* a write-off wipes whatever was outstanding as at this week */
+    if(wo[key]){ owed=0; from=null; }
+    if(locked){
+      if(owed>0) out[key]={owed, from, credit:0};
+      return;
+    }
+
+    const prevOwed=owed;
+    const thresh=plThresh(unit);
+    let cred=0;
+
+    if(unit==="yn"){
+      /* attendance is one a week, £50, so a missed one can never come back
+         through this line. it only clears by being paid twice on a later
+         slip, or by being written off. */
+      const A=S("attendance"), raw=num(p[key]);
+      const paid = raw===null ? (e[key].units===1) : (raw===1);
+      if(e[key].units===1 && !paid){ if(prevOwed===0) from=w; owed+=A; }
+      if(wk.att2){
+        if(owed>0) owed=Math.max(0,owed-A); else cred=A;
+        if(owed===0) from=null;
+      }
+    }else{
+      const target = e[key].units + owed;
+      const raw = num(p[key]);
+      let val = raw;
+      if(unit==="n" && raw===null && chk.nights) val=target;   /* ticked = checked and agrees */
+      if(val===null){ if(owed>0) out[key]={owed,from,credit:0}; return; }
+
+      const diff = val - target;
+      if(diff>=0){
+        owed=0; from=null;
+        cred = diff>=thresh ? diff : 0;
+      }else{
+        let short=-diff;
+        if(credit>0) short=Math.max(0,short-credit);   /* them taking last week's overpayment back */
+        if(short<thresh) short=0;
+        if(short>0 && prevOwed===0) from=w;
+        owed=short;
+        if(owed===0) from=null;
+      }
+    }
+    if(owed>0 || cred>0) out[key]={owed, from, credit:cred};
+  });
+  return out;
 }
 
 /* ============ state ============ */
@@ -1333,6 +1476,7 @@ function renderPayslip(c){
   const box=document.getElementById("plList");
   box.innerHTML="";
   const locked=plLocked(k);
+  const carryIn=plCarryIn(k), carryOut=plStep(k,carryIn);
   box.className = locked ? "prov" : "";
   if(locked) box.innerHTML=
     `<div class="lock"><span>&#9432;</span><span>Predicted only &mdash; <b>not paid until `
@@ -1342,26 +1486,38 @@ function renderPayslip(c){
   PL_LINES.forEach(([key,label,unit,rateKey])=>{
     const exp=e[key];
     const raw=num(p[key]);
+    const cin=carryIn[key]||plBlank(), cout=carryOut[key]||plBlank();
+    /* a write-off is recorded against this week, so it has to be honoured
+       here as well as downstream — otherwise the strip he just dismissed
+       sits there until the week rolls over. */
+    const wroteOff=!!(((d.weeks[k]||{}).wo||{})[key]);
+    const owed=wroteOff?0:cin.owed, credit=cin.credit;
     const row=document.createElement("div");
     row.className="pl"+(raw===null?"":" has");
 
     if(unit==="n"){
-      const v = raw===null ? exp.units : raw;
-      const g = raw===null ? null : raw-exp.units;
+      /* the slider running to twelve is not arbitrary — a week they miss
+         entirely is up to six, so two weeks' worth has to fit on it. */
+      const tick  = !!((d.weeks[k]||{}).chk||{}).nights;
+      const tgt   = exp.units + owed;
+      const v     = raw===null ? tgt : raw;
+      const seen  = raw!==null || tick;
+      const g     = seen ? v-tgt : null;
       row.innerHTML=`
-        <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">expected ${exp.units} · ${money(exp.cash)}</span></div>
+        <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">expected ${exp.units}${owed?" +"+owed+" owed":""} · ${money(exp.cash)}</span></div>
         <div class="nval"><span class="pv">${v}</span><span class="k">on the slip</span></div>
-        <input type="range" class="pr" min="0" max="6" step="1" value="${v}">
-        <div class="sub">${
-          g===null ? "not entered yet"
-          : g===0  ? "matches"
-          : (g>0?"+":"−")+Math.abs(g)+" · "+(g>0?"+":"−")+money(Math.abs(g)*(S("nightOut")+S("meal")))}</div>`;
+        <input type="range" class="pr" min="0" max="12" step="1" value="${v}">
+        <div class="ck${seen?" on":""}"><button class="ckb${seen?" on":""}">&#10003;</button><span class="ckl">${
+          seen ? (raw===null ? "checked against the slip · matches" : "checked against the slip")
+               : "tap when you have checked this against the slip"}</span></div>
+        ${g===null||g===0?"":`<div class="sub">${(g>0?"+":"−")+Math.abs(g)+" · "+(g>0?"+":"−")+money(Math.abs(g)*(S("nightOut")+S("meal")))}</div>`}`;
 
     }else if(unit==="yn"){
       const paid = raw===null ? exp.units===1 : raw===1;
       const g = raw===null ? null : (raw?1:0)-exp.units;
+      const twice = !!(d.weeks[k]||{}).att2;
       row.innerHTML=`
-        <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">expected ${exp.units?"yes":"no"} · ${money(exp.cash)}</span></div>
+        <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">expected ${exp.units?"yes":"no"}${owed?" +"+money(owed)+" owed":""} · ${money(exp.cash+(twice?S("attendance"):0))}</span></div>
         <div class="bot">
           <button class="chip ynb${paid?" on":""}">${paid?"on the slip":"not on the slip"}</button>
           <span class="gap" style="color:${g===null?"var(--dim)":g===0?"var(--green)":"var(--red)"}">${
@@ -1370,12 +1526,13 @@ function renderPayslip(c){
 
     }else if(unit==="h"){
       const shown = raw===null ? "" : p[key];
-      const gapH  = raw===null ? null : raw-exp.units;
+      const tgt   = exp.units + owed;
+      const gapH  = raw===null ? null : raw-tgt;
       const gapP  = raw===null ? null : gapH*S(rateKey);
       row.innerHTML=`
-        <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">logged ${n2(exp.units)} h</span></div>
+        <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">logged ${n2(exp.units)} h${owed?" <i class=\"owetag\">+"+n2(owed)+" owed</i>":""}</span></div>
         <div class="bot">
-          <input class="pin" inputmode="decimal" placeholder="${n2(exp.units)}" value="${shown}">
+          <input class="pin" inputmode="decimal" placeholder="${n2(tgt)}" value="${shown}">
           <span class="unit">hours</span>
           <span class="gap" style="color:${gapH===null?"var(--dim)":Math.abs(gapH)<0.005?"var(--green)":"var(--red)"}">${
             gapH===null ? "—" : Math.abs(gapH)<0.005 ? "ok" : (gapH>0?"+":"−")+n2(Math.abs(gapH))+" h"
@@ -1399,6 +1556,58 @@ function renderPayslip(c){
         </div>`;
     }
 
+    /* ---- the carry-over strip ---- */
+    const unitTxt = n => unit==="h" ? n2(n)+" h" : unit==="yn" ? money(n) : String(n);
+    if(!locked && (owed>0 || cout.owed>0 || cout.credit>0)){
+      const st=document.createElement("div");
+      let cls="strip", head="", body="", acts=true;
+
+      if(owed>0 && cout.owed===0 && cout.credit===0){
+        cls+=" done"; acts=false;
+        head=`<span class="sh">${unitTxt(owed)}</span><span class="sd">from ${prettyDate(cin.from||k)} — <b>cleared by this slip</b></span>`;
+        body=`nothing outstanding on this line`;
+      }else if(owed>0 && cout.owed>0 && cout.owed<owed){
+        head=`<span class="sh">${unitTxt(cout.owed)}</span><span class="sd">still owed — ${unitTxt(owed-cout.owed)} of the ${unitTxt(owed)} came through</span>`;
+        body=`carried into next week`;
+      }else if(owed>0){
+        cls += unit==="yn" ? " miss" : "";
+        head=`<span class="sh">${unitTxt(owed)}</span><span class="sd">owed from ${prettyDate(cin.from||k)}</span>`;
+        body= unit==="yn"
+          ? `only ever one a week, so it cannot come back through this line`
+          : `expecting <b>${unitTxt(exp.units+owed)}</b> in total — ${unitTxt(exp.units)} this week, ${unitTxt(owed)} owed`;
+      }else if(cout.owed>0){
+        head=`<span class="sh">${unitTxt(cout.owed)}</span><span class="sd">short on this slip</span>`;
+        body=`carried into next week`;
+      }else{
+        cls+=" over"; acts=false;
+        head=`<span class="sh">${unitTxt(cout.credit)}</span><span class="sd">more than logged — noted, not chased</span>`;
+        body=`if next week comes up short by this, that is them taking it back. otherwise it lapses.`;
+      }
+
+      st.className=cls;
+      st.innerHTML=`<div class="sl">${head}</div><div class="stot">${body}</div>`;
+      if(acts){
+        const bar=document.createElement("div");
+        bar.className="oact";
+        if(unit==="yn" && owed>0 && !(d.weeks[k]||{}).att2){
+          const b2=document.createElement("button");
+          b2.className="wo full"; b2.textContent="paid twice this week";
+          b2.addEventListener("click",()=>{
+            const w=d.weeks[k]=d.weeks[k]||{}; w.att2=1; save(); render();
+          });
+          bar.appendChild(b2);
+        }
+        const bw=document.createElement("button");
+        bw.className="wo"; bw.textContent="write off";
+        bw.addEventListener("click",()=>{
+          const w=d.weeks[k]=d.weeks[k]||{}; w.wo=w.wo||{}; w.wo[key]=1; save(); render();
+        });
+        bar.appendChild(bw);
+        st.appendChild(bar);
+      }
+      row.appendChild(st);
+    }
+
     const commit=v=>{
       const w=d.weeks[k]=d.weeks[k]||{};
       w.payslip=w.payslip||{};
@@ -1418,9 +1627,25 @@ function renderPayslip(c){
          stray drag leaves a figure behind that looks identical to no figure. */
       rng.addEventListener("change",ev=>{
         const v=Number(ev.target.value);
-        commit(v===exp.units ? "" : String(v));
+        /* landing on the number the app expects — including anything owed —
+           means "agrees", so nothing is stored. dragging is itself an act of
+           checking, so it ticks the confirmation too. */
+        const w=d.weeks[k]=d.weeks[k]||{}; w.chk=w.chk||{}; w.chk.nights=1;
+        commit(v===exp.units+owed ? "" : String(v));
       });
     }
+    /* the tick is confirmation, not a figure. without it an untouched slider
+       sitting on the expected number would count as "paid" and quietly wipe
+       a debt he never checked. untapped means he has not looked yet. */
+    const ck=row.querySelector(".ckb");
+    if(ck && locked) ck.disabled=true;
+    if(ck && !locked) ck.addEventListener("click",()=>{
+      const w=d.weeks[k]=d.weeks[k]||{}; w.chk=w.chk||{};
+      if(w.chk.nights){ delete w.chk.nights; if(!Object.keys(w.chk).length) delete w.chk; }
+      else w.chk.nights=1;
+      save(); render();
+    });
+
     const yn=row.querySelector(".ynb");
     if(yn && locked) yn.disabled=true;
     if(yn && !locked) yn.addEventListener("click",()=>{
@@ -1623,7 +1848,8 @@ const SETUP_RATES=[
   ["meal","Meal allowance","goes with every night out"],
   ["attendance","Attendance allowance","full week, no days missed"],
   ["bhHours","Bank holiday hours","paid, not worked, counts towards the threshold"],
-  ["holHours","Holiday hours a day","paid, not worked, counts towards the threshold"]
+  ["holHours","Holiday hours a day","paid, not worked, counts towards the threshold"],
+  ["owedThresh","Ignore shortfalls under","hours — below this it is rounding, not a shortfall"]
 ];
 const SETUP_DED=[
   ["pensionRate","Pension %","of qualifying earnings, off before tax"],

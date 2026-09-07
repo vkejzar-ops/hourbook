@@ -1,7 +1,7 @@
 /* Hourbook offline cache.
    Bump CACHE when you upload a new index.html — that is what makes
    phones pick the new version up instead of the old cached one. */
-const CACHE = "hourbook-v16";
+const CACHE = "hourbook-v17";
 const FILES = ["./", "./index.html", "./icon-180.png", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
