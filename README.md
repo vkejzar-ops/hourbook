@@ -23,11 +23,11 @@ This file exists so a future conversation can pick the project up cold.
 
 ## Version discipline
 
-`const BUILD="v19"` in `index.html` and `const CACHE = "hourbook-v19"` in `sw.js`
+`const BUILD="v20"` in `index.html` and `const CACHE = "hourbook-v20"` in `sw.js`
 **must be bumped together on every change.** The test `build.js` fails if they
 drift. The build number is shown in More → Everything else.
 
-Current version: **v19**.
+Current version: **v20**.
 
 ---
 
@@ -171,7 +171,34 @@ rest and 15 to use a reduced one fall straight out of the same arithmetic.
 
 CSV gains a **Rest in 24h window (h)** column next to the existing rest hours.
 
-Covered by `window.js` (48 checks).
+### Counting at clock-out (v20)
+
+v19 still waited for the next start time before moving the reduced-rest tally,
+on the grounds that a long enough break would be a weekly rest instead and
+should not burn one of the three. Vit pointed out that this is only true while
+a full rest is still possible. Once under 11 hours of the window remain, no
+full daily rest can fit in it, so the reduction is settled at clock-out and
+waiting decides nothing.
+
+So the rule is now two-sided:
+
+- **Under 11h left in the window at clock-out** — settled. Counts straight away.
+- **11h or more left** — still open. The clock-in decides, as before.
+
+`openRestInfo(ds)` returns `{avail, kind}` for a shift that has finished with
+nothing started after it, where `kind` is `open`, `reduced`, or `short`. It
+returns `null` as soon as anything is logged after that shift, which is what
+stops the same rest being counted twice — once as open and again as measured.
+
+`reducedSinceWeekly()` checks the most recent finished shift for a settled open
+rest, then runs the existing backward walk. `calc()` feeds `openRestInfo` into
+`redRest` and `shortRest` the same way.
+
+A shift over about 16 hours leaves under 9 hours in the window. That is not a
+legal daily rest at all, so it is counted as **short**, not as one of the three
+reduced ones — the same treatment a measured sub-9-hour gap gets.
+
+Covered by `window.js` (63 checks).
 
 ---
 
@@ -293,7 +320,7 @@ finish-time handler; the gov.uk fetch does not.
 
 ## Tests
 
-28 suites in `/home/claude/t/`, all green as of v19. Run with `node <file>.js`.
+28 suites in `/home/claude/t/`, all green as of v20. Run with `node <file>.js`.
 
 `test.js` · `hol.js` · `new2.js` · `holui.js` · `dom.js` · `hdr.js` · `imp.js` ·
 `wipe.js` · `holpay.js` · `holui2.js` · `backup.js` · `bhseed.js` · `bhapi.js` ·

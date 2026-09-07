@@ -579,7 +579,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v19";
+const BUILD="v20";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -714,8 +714,37 @@ function restTextKey(info){
 
 /* how many reduced daily rests have been used since the last weekly rest,
    counting backwards from and including the given day */
+
+/* A shift that has clocked out but has nothing started after it yet still has
+   an OPEN rest — normally we cannot judge it, because a long enough break
+   would be a weekly rest instead. But if under 11 hours of the 24-hour window
+   are left when he clocks out, no full daily rest can fit in that window any
+   more, so the reduction is already settled and waiting decides nothing.
+   Returns null when the rest is closed (something has started since) or when
+   there is no finish time to work from. */
+function openRestInfo(ds){
+  const d=load(), r=d.days[ds]||{};
+  const en=endMs(ds,r), st=startMs(ds,r);
+  if(en===null||st===null) return null;
+  for(let i=1;i<=21;i++){                 // is anything logged after it?
+    const n=addDays(ds,i);
+    if(startMs(n,d.days[n]||{})!==null) return null;
+  }
+  const avail=Math.max(0,Math.round((st+24*3600000-en)/60000));
+  return { avail, kind: avail>=11*60 ? "open" : avail>=9*60 ? "reduced" : "short" };
+}
+
 function reducedSinceWeekly(ds){
   let n=0;
+  const d=load();
+  /* the open rest at the end, if the shift length has already settled it */
+  for(let i=0;i<30;i++){
+    const day=addDays(ds,-i);
+    if(endMs(day,d.days[day]||{})===null) continue;
+    const o=openRestInfo(day);
+    if(o && o.kind==="reduced") n++;
+    break;                                 // only the most recent shift
+  }
   for(let i=0;i<30;i++){
     const day=addDays(ds,-i);
     const m=restInfo(day);
@@ -818,6 +847,10 @@ function calc(monKey, skip){
     const k=restKind(restInfo(ds));
     if(k==="reduced") redRest++;
     if(k==="short") shortRest++;
+    /* a shift with nothing after it yet, already settled by its own length */
+    const orq=openRestInfo(ds);
+    if(orq && orq.kind==="reduced") redRest++;
+    if(orq && orq.kind==="short") shortRest++;
   });
 
   const bhMins=bhDays*S("bhHours")*60;
@@ -1272,7 +1305,7 @@ function renderDay(c){
       <h2>Earliest you can start again</h2>
       <div class="nxt">
         <div class="${nineLeft?"":"off"}"><b>${at(eMs+9*3600000)}</b><span>reduced rest — already used</span>
-          <small>${nineLeft?(3-redUsed-1)+" of 3 left after this one":"none were left"}</small></div>
+          <small>${nineLeft?(3-redUsed)+" of 3 left":"over the three allowed"}</small></div>
       </div>
       <p class="note">That shift was long enough that only ${hm(avail)} of your rest falls inside the 24 hours from when you started, so it is a reduced one whatever you do now. Sleeping longer does not put it back.</p>`;
     } else {
