@@ -1,0 +1,1600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="color-scheme" content="light">
+<meta name="apple-mobile-web-app-title" content="Hourbook">
+<meta name="theme-color" content="#F6F3ED">
+<title>Hourbook</title>
+<style>
+:root{
+  color-scheme:light;
+  --ground:#F6F3ED;
+  --panel:#FFFFFF;
+  --panel-2:#EDE8DE;
+  --rule:#DCD5C7;
+  --text:#211E19;
+  --dim:#777066;
+  --amber:#A75F07;
+  --green:#2C7A50;
+  --red:#B0362A;
+  --tap:44px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--ground);color:var(--text)}
+body{
+  font:400 16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  font-variant-numeric:tabular-nums;
+  padding-bottom:calc(64px + env(safe-area-inset-bottom));
+  -webkit-text-size-adjust:100%;
+}
+button,input,select{font:inherit;font-variant-numeric:tabular-nums;color:inherit}
+button{background:none;border:none;cursor:pointer}
+h2{font-size:15px;font-weight:600;color:var(--dim);margin:26px 0 8px;letter-spacing:.01em}
+a{color:var(--amber)}
+
+/* ---- header ---- */
+header{
+  position:sticky;top:0;z-index:20;background:var(--ground);
+  padding:calc(8px + env(safe-area-inset-top)) 10px 10px;
+  border-bottom:1px solid var(--rule);
+}
+.weeknav{display:flex;align-items:stretch;gap:4px}
+.weeknav .arrow{
+  width:36px;border:1px solid var(--rule);border-radius:8px;
+  color:var(--dim);font-size:18px;line-height:1;flex:0 0 36px;
+}
+.weeknav .arrow:active{background:var(--panel-2)}
+.weeknav .weeklabel{
+  flex:1 1 auto;min-width:0;width:auto;border:0;background:none;
+  display:flex;flex-direction:column;justify-content:center;
+  text-align:center;padding:4px 2px;min-height:44px;overflow:visible;
+}
+.weeknav .weeklabel .r1{
+  font-size:16px;font-weight:600;line-height:1.2;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.weeknav .weeklabel .r2{
+  font-size:12.5px;color:var(--dim);margin-top:2px;line-height:1.2;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+
+/* ---- hero ---- */
+.hero{padding:18px 16px 16px;border-bottom:1px solid var(--rule)}
+.hero .fig{
+  font-size:46px;font-weight:400;letter-spacing:-.02em;color:var(--amber);
+  line-height:1;margin:0;
+}
+.hero .fig small{font-size:26px;font-weight:400}
+.hero .sub{color:var(--dim);font-size:13.5px;margin-top:7px}
+.hero .strip{display:flex;gap:18px;margin-top:12px;font-size:13.5px}
+.hero .strip span{color:var(--dim)}
+.hero .strip b{font-weight:600;color:var(--text)}
+
+main{padding:0 16px 30px}
+
+/* ---- day rows ---- */
+.day{border-bottom:1px solid var(--rule);padding:11px 0 12px}
+.day.today{box-shadow:inset 3px 0 0 var(--amber);padding-left:11px;margin-left:-11px}
+.day.bh{background:rgba(167,95,7,.06)}
+.dayhead{display:flex;align-items:baseline;gap:8px}
+.dayname{font-weight:600;font-size:15px;min-width:104px}
+.dayname em{font-style:normal;color:var(--dim);font-weight:400}
+.daytot{margin-left:auto;font-size:15px;color:var(--amber)}
+.daytot.zero{color:#BAB2A4}
+.times{display:flex;align-items:center;gap:8px;margin-top:9px}
+.times input{
+  width:78px;height:var(--tap);text-align:center;font-size:19px;letter-spacing:.06em;
+  background:var(--panel);border:1px solid var(--rule);border-radius:9px;padding:0;
+}
+.times input:focus{outline:none;border-color:var(--amber);background:#FFF8EE;box-shadow:0 0 0 3px rgba(167,95,7,.12)}
+.times .dash{color:var(--dim)}
+.chip{
+  height:var(--tap);padding:0 13px;border:1px solid var(--rule);border-radius:9px;
+  color:var(--dim);font-size:14px;background:var(--panel);
+}
+.chip.on{background:var(--amber);border-color:var(--amber);color:#FFF;font-weight:600}
+.chip.wide{margin-left:auto}
+.bhtag{font-size:13px;color:var(--amber);margin-top:8px}
+.extra{display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap}
+.extra label{font-size:13px;color:var(--dim)}
+.extra input.num{
+  width:60px;height:38px;text-align:center;background:var(--panel);
+  border:1px solid var(--rule);border-radius:8px;
+}
+.extra select{
+  height:38px;background:var(--panel);border:1px solid var(--rule);
+  border-radius:8px;padding:0 8px;font-size:14px;
+}
+
+/* ---- ledger ---- */
+.ledger{margin-top:6px}
+.lrow{display:flex;padding:7px 0;border-bottom:1px solid var(--rule);font-size:14.5px;gap:10px}
+.lrow .d{flex:1;color:var(--dim)}
+.lrow .u{width:74px;text-align:right;color:var(--dim);font-size:13px}
+.lrow .c{width:86px;text-align:right}
+.lrow.tot{border-bottom:none;border-top:2px solid #C7BEAC;margin-top:2px;padding-top:10px;font-weight:600}
+.lrow.tot .d{color:var(--text)}
+.lrow.neg .c{color:var(--red)}
+
+/* ---- generic field ---- */
+.field{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--rule)}
+.field label{flex:1;font-size:14.5px}
+.field .hint{display:block;font-size:12.5px;color:var(--dim);margin-top:2px}
+.field input,.field select{
+  width:104px;height:40px;text-align:right;padding:0 10px;background:var(--panel);
+  border:1px solid var(--rule);border-radius:8px;
+}
+.field select{text-align:left;width:140px}
+.field input:focus,.field select:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(167,95,7,.12)}
+
+/* ---- status ---- */
+.stat{padding:11px 0;border-bottom:1px solid var(--rule)}
+.stat .top{display:flex;align-items:baseline;gap:10px}
+.stat .name{font-size:14.5px;flex:1}
+.stat .val{font-size:15px;font-weight:600}
+.stat .note{font-size:12.5px;color:var(--dim);margin-top:3px}
+.bar{height:5px;background:var(--panel-2);border-radius:3px;margin-top:8px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--green);border-radius:3px}
+.bar i.warn{background:var(--amber)}
+.bar i.over{background:var(--red)}
+.ok{color:var(--green)}.warn{color:var(--amber)}.over{color:var(--red)}
+
+/* ---- history ---- */
+.hist{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--rule);width:100%;text-align:left}
+.hist .wk{flex:1}
+.hist .wk b{display:block;font-size:15px;font-weight:600}
+.hist .wk span{font-size:12.5px;color:var(--dim)}
+.hist .amt{text-align:right}
+.hist .amt b{display:block;font-size:15px;color:var(--amber);font-weight:500}
+.hist .amt span{font-size:12.5px;color:var(--dim)}
+.hist .wk span .ok{color:var(--green)}
+.hist .wk span .bad{color:var(--red)}
+
+.btn{
+  width:100%;height:var(--tap);border:1px solid var(--rule);border-radius:9px;
+  background:var(--panel);margin-top:10px;font-size:15px;
+}
+.btn:active{background:var(--panel-2)}
+.btn.primary{background:var(--amber);border-color:var(--amber);color:#FFF;font-weight:600}
+.btn.danger{color:var(--red)}
+.note{font-size:12.5px;color:var(--dim);margin-top:10px;line-height:1.5}
+
+/* ---- tab bar ---- */
+nav{
+  position:fixed;left:0;right:0;bottom:0;z-index:30;display:flex;
+  background:rgba(246,243,237,.94);backdrop-filter:blur(12px);
+  border-top:1px solid var(--rule);padding-bottom:env(safe-area-inset-bottom);
+}
+nav button{flex:1;height:56px;font-size:12px;color:var(--dim);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+nav button .g{width:20px;height:2px;background:currentColor;border-radius:2px;opacity:0}
+nav button.on{color:var(--amber)}
+nav button.on .g{opacity:1}
+
+.hidden{display:none!important}
+::placeholder{color:#BAB2A4}
+
+/* ---- day view ---- */
+.bigtimes{display:flex;align-items:center;gap:10px;margin:14px 0 4px}
+.bigtimes input{
+  flex:1 1 0;min-width:0;width:100%;
+  height:64px;text-align:center;font-size:29px;letter-spacing:.05em;
+  background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:0;
+}
+.bigtimes .dash{flex:none}
+.bigtimes input:focus{outline:none;border-color:var(--amber);background:#FFF8EE;box-shadow:0 0 0 3px rgba(167,95,7,.12)}
+.bigtimes .dash{color:var(--dim);font-size:13px}
+.tlabels{display:flex;gap:10px;font-size:12.5px;color:var(--dim);margin-bottom:2px}
+.tlabels span{flex:1;text-align:center}
+.tlabels i{width:26px;flex:none}
+
+.sl{padding:12px 0 6px;border-bottom:1px solid var(--rule)}
+.sl .row{display:flex;align-items:baseline;gap:10px}
+.sl .row .nm{font-size:14.5px;flex:1}
+.sl .row .vv{font-size:17px;font-weight:600;color:var(--amber)}
+.sl .row .vv.guess{color:var(--dim);font-weight:400;font-size:14.5px}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:36px;background:transparent;margin:0}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:var(--panel-2);border:1px solid var(--rule)}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;width:30px;height:30px;border-radius:50%;
+  background:var(--amber);border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.25);margin-top:-13px;
+}
+input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--panel-2)}
+input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;background:var(--amber);border:3px solid #fff}
+.ticks{display:flex;justify-content:space-between;font-size:11.5px;color:var(--dim);margin-top:-4px}
+
+.rest{padding:12px 0;border-bottom:1px solid var(--rule)}
+.rest .top{display:flex;align-items:baseline;gap:10px}
+.rest .nm{font-size:14.5px;flex:1}
+.rest .vv{font-size:17px;font-weight:600}
+.rest .note{font-size:12.5px;color:var(--dim);margin-top:4px;line-height:1.45}
+
+/* ---- earliest next start ---- */
+.nxt{display:flex;gap:10px;margin:12px 0 2px}
+.nxt div{
+  flex:1 1 0;min-width:0;padding:11px 8px;text-align:center;
+  border:1px solid var(--rule);border-radius:11px;background:var(--panel);
+}
+.nxt div b{display:block;font-size:22px;font-weight:600;letter-spacing:.02em}
+.nxt div span{display:block;font-size:11.5px;color:var(--dim);margin-top:3px}
+.nxt div small{display:block;font-size:11.5px;color:var(--dim);margin-top:2px}
+.nxt div.off{background:var(--panel-2);opacity:.5}
+.nxt div.off b{color:var(--dim)}
+
+.cards{display:flex;gap:10px;margin-top:16px}
+.cards div{flex:1;background:var(--panel);border:1px solid var(--rule);border-radius:11px;padding:11px 12px}
+.cards b{display:block;font-size:19px;font-weight:600}
+.cards b.amber{color:var(--amber)}
+.cards span{font-size:12px;color:var(--dim)}
+.linkrow{color:var(--amber);font-size:14.5px;padding:16px 0 4px;display:block;width:100%;text-align:left}
+
+/* ---- week rows ---- */
+.wrow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:12px 0;border-bottom:1px solid var(--rule)}
+.wrow.today{box-shadow:inset 3px 0 0 var(--amber);padding-left:11px;margin-left:-11px}
+.wrow .nm{flex:1}
+.wrow .nm b{display:block;font-size:15px;font-weight:600}
+.wrow .nm span{font-size:12.5px;color:var(--dim)}
+.wrow .hrs{font-size:15px;color:var(--amber);text-align:right}
+.wrow .hrs.zero{color:#BAB2A4}
+.wrow .arw{color:#C3BBAD;font-size:17px;width:12px;text-align:right}
+
+/* ---- payslip check ---- */
+.pl{padding:11px 0;border-bottom:1px solid var(--rule)}
+.pl .top{display:flex;align-items:baseline;gap:10px}
+.pl .nm{flex:1;font-size:14.5px}
+.pl .exp{font-size:12.5px;color:var(--dim)}
+.pl .bot{display:flex;align-items:center;gap:10px;margin-top:7px}
+.pl input.pin{
+  width:112px;height:42px;text-align:center;font-size:17px;background:var(--panel);
+  border:1px solid var(--rule);border-radius:9px;padding:0 6px;
+}
+.pl input.pin:focus{outline:none;border-color:var(--amber);box-shadow:0 0 0 3px rgba(167,95,7,.12)}
+.pl .unit{font-size:12.5px;color:var(--dim);width:34px}
+.pl .gap{margin-left:auto;font-size:15px;font-weight:600;text-align:right}
+.pl .sub{font-size:12.5px;color:var(--dim);margin-top:5px}
+@media (prefers-reduced-motion:no-preference){.btn,.chip{transition:background .12s}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="weeknav">
+    <button class="arrow" id="prev" aria-label="Previous">‹</button>
+    <button class="weeklabel" id="todayBtn">
+      <div class="r1" id="wkTitle">—</div>
+      <div class="r2" id="wkSub">—</div>
+    </button>
+    <button class="arrow" id="next" aria-label="Next">›</button>
+  </div>
+</header>
+
+<div class="hero">
+  <p class="fig" id="heroFig">£0<small>.00</small></p>
+  <div class="sub" id="heroSub">—</div>
+  <div class="strip" id="heroStrip"></div>
+</div>
+
+<main>
+
+  <section id="tab-day">
+    <div id="dayBody"></div>
+  </section>
+
+  <section id="tab-week" class="hidden">
+    <div id="days"></div>
+    <h2>Week extras</h2>
+    <div id="attStat"></div>
+    <button class="btn" id="holWeek">Book the whole week off</button>
+    <p class="note" id="holNote"></p>
+    <div class="field">
+      <label>SSP paid<span class="hint">type it in if it appears</span></label>
+      <input id="sspIn" inputmode="decimal" placeholder="0.00">
+    </div>
+    <h2>What that pays</h2>
+    <div class="ledger" id="ledger"></div>
+  </section>
+
+  <section id="tab-hours" class="hidden">
+    <h2>This week</h2>
+    <div id="dhWeek"></div>
+    <h2>Rest</h2>
+    <div id="dhRest"></div>
+    <h2>Working time</h2>
+    <div id="dhWtd"></div>
+    <p class="note">Counts only what you typed in. Your tachograph is the record that matters — this is a rough running tally, not a compliance tool.</p>
+  </section>
+
+  <section id="tab-pay" class="hidden">
+    <h2>Line by line off the payslip</h2>
+    <div id="plList"></div>
+    <h2>Totals</h2>
+    <div class="ledger" id="plTot"></div>
+    <p class="note" id="plNote"></p>
+    <button class="btn" id="plClear">Clear this week's payslip</button>
+  </section>
+
+  <section id="tab-history" class="hidden">
+    <h2>Weeks logged</h2>
+    <div id="histList"></div>
+    <p class="note" id="histNote"></p>
+  </section>
+
+  <section id="tab-more" class="hidden">
+    <h2>Backup</h2>
+    <button class="btn" id="expJson">Download backup file</button>
+    <button class="btn" id="impJson">Restore from backup</button>
+    <input type="file" id="fileIn" accept=".json,application/json" class="hidden">
+    <div class="field">
+      <label>Ask me to back up<span class="hint">when you clock out, if it is due</span></label>
+      <select id="bkEvery">
+        <option value="0">Off</option>
+        <option value="1">Every week</option>
+        <option value="2">Every 2 weeks</option>
+        <option value="3">Every 3 weeks</option>
+        <option value="4">Every 4 weeks</option>
+        <option value="8">Every 8 weeks</option>
+      </select>
+    </div>
+    <p class="note" id="bkNote"></p>
+
+    <h2>Export</h2>
+    <button class="btn" id="expCsv">Download every day as CSV</button>
+    <button class="btn" id="copyCsv">Copy CSV to clipboard</button>
+    <p class="note">The CSV opens straight in Numbers or Excel — one row per day, with hours, allowances, the pay worked out and whatever the payslip said. It is for reading, not for restoring — use the backup file above for that.</p>
+    <h2>Rates</h2>
+    <div id="setRates"></div>
+    <h2>Deductions</h2>
+    <div id="setDed"></div>
+    <h2>Bank holidays</h2>
+    <button class="btn" id="bhCheck">Check gov.uk now</button>
+    <p class="note" id="bhNote"></p>
+
+    <h2>Everything else</h2>
+    <button class="btn danger" id="wipe">Erase all data</button>
+    <p class="note" id="verNote"></p>
+  </section>
+</main>
+
+<nav>
+  <button data-tab="day" class="on"><span class="g"></span>Day</button>
+  <button data-tab="hours"><span class="g"></span>Hours</button>
+  <button data-tab="pay"><span class="g"></span>Payslip</button>
+  <button data-tab="history"><span class="g"></span>History</button>
+  <button data-tab="more"><span class="g"></span>More</button>
+</nav>
+
+<script>
+"use strict";
+
+/* ============ bank holidays, England & Wales ============ */
+/* ---- bank holidays ----
+   Every date here comes from gov.uk, nothing is worked out or guessed.
+   This block is just a cached copy of the England & Wales feed as it
+   stood on 7 September 2026, so the app knows the dates on a first run
+   with no signal. Once a year it refetches and replaces whole years.
+   Years gov.uk has not published yet are simply not known — the app
+   says so rather than inventing them. */
+const BH_SEED = {
+"2026":["2026-01-01","2026-04-03","2026-04-06","2026-05-04","2026-05-25","2026-08-31","2026-12-25","2026-12-28"],
+"2027":["2027-01-01","2027-03-26","2027-03-29","2027-05-03","2027-05-31","2027-08-30","2027-12-27","2027-12-28"],
+"2028":["2028-01-03","2028-04-14","2028-04-17","2028-05-01","2028-05-29","2028-08-28","2028-12-25","2028-12-26"]
+};
+
+/* ---- bank holiday lookup ---- */
+const BH_URL="https://www.gov.uk/bank-holidays.json";
+function bhOfficial(){ return load().settings.bhOfficial || {}; }
+/* the dates in force for a year: whatever we last fetched, else the cached
+   copy shipped with the app, else nothing — we do not guess. */
+function bhFor(y){
+  const off=bhOfficial();
+  if(off[y]) return off[y];
+  if(BH_SEED[y]) return BH_SEED[y];
+  return null;
+}
+const BH = {
+  has(ds){
+    if(!ds) return false;
+    const list=bhFor(ds.slice(0,4));
+    return !!list && list.indexOf(ds)>=0;
+  },
+  covers(y){ return !!bhFor(String(y)); },
+  years(){
+    const ys=new Set(Object.keys(bhOfficial()).concat(Object.keys(BH_SEED)));
+    return [...ys].sort();
+  }
+};
+
+/* fetch gov.uk and replace whole years — never merge, because a moved
+   holiday must lose its old date as well as gain the new one. */
+async function checkBankHolidays(){
+  const r=await fetch(BH_URL,{cache:"no-store"});
+  if(!r.ok) throw new Error("gov.uk returned "+r.status);
+  const j=await r.json();
+  const ew=j["england-and-wales"];
+  if(!ew || !Array.isArray(ew.events)) throw new Error("unexpected shape");
+  const ev=ew.events.map(e=>e&&e.date).filter(d=>typeof d==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(d));
+  if(!ev.length) throw new Error("no usable dates");
+  const byYear={};
+  ev.forEach(d=>{ const y=d.slice(0,4); (byYear[y]=byYear[y]||[]).push(d); });
+  const d=load(), prev=d.settings.bhOfficial||{};
+  const added=[], removed=[], newYears=[];
+  Object.keys(byYear).forEach(y=>{
+    const now=byYear[y].slice().sort();
+    byYear[y]=now;
+    const was=prev[y]||BH_SEED[y];
+    if(!was){ newYears.push(y); return; }   /* a year we never had is news, not a change */
+    now.forEach(x=>{ if(was.indexOf(x)<0) added.push(x); });
+    was.forEach(x=>{ if(now.indexOf(x)<0) removed.push(x); });
+  });
+  d.settings.bhOfficial=Object.assign({},prev,byYear);
+  d.settings.bhChecked=iso(new Date());
+  save();
+  return {added:added.sort(), removed:removed.sort(), newYears:newYears.sort(), years:BH.years()};
+}
+
+
+/* ============ defaults ============ */
+const DEFAULTS = {
+  basicRate:14.00, basicCap:50,
+  otRate:18.38,
+  satRate:20.96, satMin:5,
+  sunRate:20.96, sunMin:5,
+  nightOut:25.00, meal:5.00, attendance:50.00,
+  bhHours:10,
+  holHours:10,
+  backupWeeks:2,
+  pension:42.35,
+  bik:1.15,
+  taxRate:20, taxFree:241.73,
+  niRate:8, niFree:242.00
+};
+
+/* ============ storage ============ */
+const KEY="hourbook.v1";
+let mem=null, memOnly=false;
+function load(){
+  if(mem) return mem;
+  try{
+    const raw=localStorage.getItem(KEY);
+    mem = raw ? JSON.parse(raw) : {days:{},weeks:{},settings:{}};
+  }catch(e){ mem={days:{},weeks:{},settings:{}}; memOnly=true; }
+  mem.days=mem.days||{}; mem.weeks=mem.weeks||{}; mem.settings=mem.settings||{};
+  return mem;
+}
+function save(){
+  try{ localStorage.setItem(KEY,JSON.stringify(mem)); }
+  catch(e){ memOnly=true; }
+}
+const S = k => { const v = load().settings[k]; return (v===undefined||v===null||v==="") ? DEFAULTS[k] : Number(v); };
+
+/* ============ dates ============ */
+const DAYNAME=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+const SHORTDAY=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function iso(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function fromIso(s){ const p=s.split("-"); return new Date(+p[0],+p[1]-1,+p[2]); }
+function addDays(s,n){ const d=fromIso(s); d.setDate(d.getDate()+n); return iso(d); }
+function mondayOf(s){ const d=fromIso(s); const off=(d.getDay()+6)%7; d.setDate(d.getDate()-off); return iso(d); }
+function dowIndex(s){ return (fromIso(s).getDay()+6)%7; }
+function shortDate(s){ const d=fromIso(s); return d.getDate()+" "+MON[d.getMonth()]; }
+
+/* ============ helpers ============ */
+function parseHHMM(v){
+  if(v===undefined||v===null||v==="") return null;
+  const s=String(v).replace(/\D/g,"");
+  if(s.length<3||s.length>4) return null;
+  const h=+s.slice(0,s.length-2), m=+s.slice(-2);
+  if(h>23||m>59) return null;
+  return h*60+m;
+}
+function duration(a,b){
+  const x=parseHHMM(a), y=parseHHMM(b);
+  if(x===null||y===null) return 0;
+  let d=y-x; if(d<0) d+=1440;
+  return d;
+}
+const q = m => Math.round(m/15)*15;
+function hm(m){
+  if(!m) return "0h";
+  const h=Math.floor(m/60), mm=Math.round(m%60);
+  return mm ? h+"h "+String(mm).padStart(2,"0") : h+"h";
+}
+const dec = m => m/60;
+const money = n => "£"+Number(n||0).toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2});
+const n2 = n => Number(n||0).toFixed(2);
+const num = v => (v===undefined||v===null||v==="") ? null : Number(v);
+
+/* ============ rest, worked out from the clock ============ */
+function startMs(ds,r){ const s=parseHHMM(r.start); return s===null?null:fromIso(ds).getTime()+s*60000; }
+function endMs(ds,r){
+  const s=parseHHMM(r.start), e=parseHHMM(r.end);
+  if(s===null||e===null) return null;
+  return fromIso(ds).getTime()+(e<s?e+1440:e)*60000;
+}
+function restBefore(ds){
+  const d=load(), st=startMs(ds,d.days[ds]||{});
+  if(st===null) return null;
+  for(let i=1;i<=21;i++){
+    const p=addDays(ds,-i), en=endMs(p,d.days[p]||{});
+    if(en!==null){ const m=Math.round((st-en)/60000); return m>0?m:null; }
+  }
+  return null;
+}
+function restKind(m){
+  if(m===null) return "none";
+  if(m>=24*60) return "weekly";
+  if(m>=11*60) return "regular";
+  if(m>=9*60)  return "reduced";
+  return "short";
+}
+const REST_TEXT={
+  none:["—","","Type a start time and this fills itself in from when you finished last."],
+  weekly:["","ok","More than 24 hours — that is a weekly rest, not a daily one."],
+  regular:["","ok","A full daily rest. Nothing used up."],
+  reduced:["","warn","A reduced daily rest. Allowed three times between weekly rests, and nothing to pay back."],
+  short:["","over","Under 9 hours. That is not a legal daily rest — check it against your tacho."]
+};
+
+/* how many reduced daily rests have been used since the last weekly rest,
+   counting backwards from and including the given day */
+function reducedSinceWeekly(ds){
+  let n=0;
+  for(let i=0;i<30;i++){
+    const day=addDays(ds,-i);
+    const m=restBefore(day);
+    if(m===null) continue;
+    const k=restKind(m);
+    if(k==="weekly") break;
+    if(k==="reduced") n++;
+  }
+  return n;
+}
+
+/* the longest break touching this week, worked out from the clock */
+function weeklyRestOf(k){
+  let best=0;
+  for(let i=0;i<8;i++){                 // 8 covers the gap after Sunday's shift
+    const m=restBefore(addDays(k,i));
+    if(m!==null && m>best) best=m;
+  }
+  return best;
+}
+
+/* ============ driving ============ */
+function driveInfo(ds,r){
+  const worked=duration(r.start,r.end);
+  const stored=num(r.drive);
+  if(stored!==null) return {mins:Math.round(stored*60), assumed:false, worked};
+  if(worked>0) return {mins:Math.min(540,worked), assumed:true, worked};
+  return {mins:0, assumed:false, worked};
+}
+
+/* ============ the week's maths ============ */
+function calc(monKey, skip){
+  const d=load();
+  const dates=[]; for(let i=0;i<7;i++) dates.push(addDays(monKey,i));
+  const wk=d.weeks[monKey]||{};
+  let weekdayMins=0, satMins=0, sunMins=0, bhWorkedPaid=0, bhWorkedMins=0;
+  let nights=0, bhDays=0, holDays=0, workedMins=0, driveMins=0, extDrive=0;
+  let redRest=0, shortRest=0, assumedDrive=0;
+  const attMissed=[], attPending=[];
+  const todayIso=iso(new Date());
+
+  dates.forEach((ds,i)=>{
+    if(ds===skip) return;
+    const r=d.days[ds]||{};
+    const mins=duration(r.start,r.end);
+    /* a holiday only counts on a weekday you did not work.
+       if it is also a bank holiday, the bank holiday wins — never both. */
+    const onHol = i<5 && !!r.hol && mins===0 && !BH.has(ds);
+    workedMins+=mins;
+    if(r.night) nights++;
+
+    /* attendance: every Mon–Fri needs hours on it, unless it is a bank
+       holiday he was not asked to work, or a booked holiday */
+    if(i<5 && mins===0 && !BH.has(ds) && !onHol){
+      if(ds>todayIso) attPending.push(ds); else attMissed.push(ds);
+    }
+
+    if(i<5 && BH.has(ds)){
+      if(mins===0) bhDays++;
+      else { bhWorkedMins+=mins; bhWorkedPaid+=Math.max(q(mins),S("sunMin")*60); }
+    }
+    else if(onHol) holDays++;
+    else if(i<5) weekdayMins+=mins;
+    else if(i===5) satMins+=mins;
+    else sunMins+=mins;
+
+    const dv=driveInfo(ds,r);
+    driveMins+=dv.mins;
+    if(dv.assumed && dv.mins>0) assumedDrive++;
+    if(dv.mins>540) extDrive++;
+
+    const k=restKind(restBefore(ds));
+    if(k==="reduced") redRest++;
+    if(k==="short") shortRest++;
+  });
+
+  const bhMins=bhDays*S("bhHours")*60;
+  const holMins=holDays*S("holHours")*60;
+  const pool=weekdayMins+bhMins+holMins;
+  const capMins=S("basicCap")*60;
+  const basicMins=Math.min(capMins,pool);
+  const otMins=q(Math.max(0,pool-basicMins));
+  const satPaid=satMins>0?Math.max(q(satMins),S("satMin")*60):0;
+  const sunPaid=sunMins>0?Math.max(q(sunMins),S("sunMin")*60):0;
+
+  /* holiday hours fill the basic pool first, so they are never overtime.
+     split them out so each matches its own line on the slip. */
+  const holBasic=Math.min(holMins,basicMins);
+  const basicWorked=basicMins-holBasic;
+
+  const holPay=dec(holBasic)*S("basicRate");
+  const basicPay=dec(basicWorked)*S("basicRate");
+  const otPay=dec(otMins)*S("otRate");
+  const satPay=dec(satPaid)*S("satRate");
+  const sunPay=dec(sunPaid)*S("sunRate");
+  const bhwPay=dec(bhWorkedPaid)*S("sunRate");
+  const nightPay=nights*S("nightOut");
+  const mealPay=nights*S("meal");
+  const attEarned=attMissed.length===0;
+  const attPay=attEarned?S("attendance"):0;
+  const ssp=Number(wk.ssp)||0;
+  const pension=S("pension");
+
+  const L=[];
+  const push=(key,name,units,cash)=>{ if(cash) L.push({key,name,units,cash}); };
+  push("basic","Basic hours",dec(basicWorked).toFixed(2),basicPay);
+  push("hol","Holiday pay",dec(holBasic).toFixed(2),holPay);
+  push("ot","Standard OT",dec(otMins).toFixed(2),otPay);
+  push("sat","Saturday OT",dec(satPaid).toFixed(2),satPay);
+  push("sun","Sunday",dec(sunPaid).toFixed(2),sunPay);
+  push("bhw","Bank holiday worked",dec(bhWorkedPaid).toFixed(2),bhwPay);
+  push("nights","Night out + meal",nights,nightPay+mealPay);
+  push("att","Attendance allowance","",attPay);
+  push("ssp","SSP","",ssp);
+
+  const beforePension=basicPay+holPay+otPay+satPay+sunPay+bhwPay+nightPay+mealPay+attPay+ssp;
+  const cash=beforePension-pension;
+  const taxable=cash+S("bik")-nightPay-mealPay;
+  const tax=Math.max(0,taxable-S("taxFree"))*S("taxRate")/100;
+  const niable=taxable-S("bik");
+  const ni=Math.max(0,niable-S("niFree"))*S("niRate")/100;
+  const net=cash-tax-ni;
+
+  return {
+    dates, lines:L, nights, bhDays, bhMins, bhWorkedMins, bhWorkedPaid,
+    holDays, holMins,
+    workedMins, paidMins:basicMins+otMins+satPaid+sunPaid+bhWorkedPaid,
+    basicMins, basicWorked, holBasic, otMins, satPaid, sunPaid,
+    beforePension, pension, cash, taxable, tax, ni, net,
+    driveMins, extDrive, redRest, shortRest, assumedDrive,
+    attEarned, attMissed, attPending, attPay,
+    hasData: workedMins>0 || bhDays>0 || holDays>0 || nights>0 || ssp>0
+  };
+}
+
+/* ============ payslip check ============ */
+/* hours-first: for the paid lines he types HOURS, never pounds.
+   tax, NI and pension are not compared — they cannot be worked out exactly. */
+const PL_LINES=[
+  ["basic","Basic hours","h","basicRate"],
+  ["hol","Holiday pay","h","basicRate"],
+  ["ot","Standard OT","h","otRate"],
+  ["sat","Saturday OT","h","satRate"],
+  ["sun","Sunday","h","sunRate"],
+  ["bhw","Bank holiday worked","h","sunRate"],
+  ["nights","Night out + meal","n",null],
+  ["att","Attendance allowance","yn",null],
+  ["ssp","SSP","£",null]
+];
+const PL_HOURLY=["basic","hol","ot","sat","sun","bhw"];
+function plExpected(k,c){
+  const w=load().weeks[k]||{};
+  const e={};
+  e.basic ={units:dec(c.basicWorked),    cash:dec(c.basicWorked)*S("basicRate")};
+  e.hol   ={units:dec(c.holBasic),       cash:dec(c.holBasic)*S("basicRate")};
+  e.ot    ={units:dec(c.otMins),         cash:dec(c.otMins)*S("otRate")};
+  e.sat   ={units:dec(c.satPaid),        cash:dec(c.satPaid)*S("satRate")};
+  e.sun   ={units:dec(c.sunPaid),        cash:dec(c.sunPaid)*S("sunRate")};
+  e.bhw   ={units:dec(c.bhWorkedPaid),   cash:dec(c.bhWorkedPaid)*S("sunRate")};
+  e.nights={units:c.nights,              cash:c.nights*(S("nightOut")+S("meal"))};
+  e.att   ={units:c.attEarned?1:0,       cash:c.attPay};
+  e.ssp   ={units:null,                  cash:Number(w.ssp)||0};
+  return e;
+}
+function plActualCash(key,raw){
+  if(raw===null) return null;
+  const def=PL_LINES.find(l=>l[0]===key);
+  if(def[2]==="h")  return raw*S(def[3]);
+  if(def[2]==="n")  return raw*(S("nightOut")+S("meal"));
+  if(def[2]==="yn") return raw?S("attendance"):0;
+  return raw;
+}
+function plSaved(k){ return (load().weeks[k]||{}).payslip||{}; }
+function plHasAny(k){ const p=plSaved(k); return Object.keys(p).some(x=>p[x]!==""&&p[x]!==undefined&&p[x]!==null); }
+function plTotals(k,c){
+  const p=plSaved(k), e=plExpected(k,c);
+  let expH=0, slipH=0, expPay=0, slipPay=0;
+  PL_LINES.forEach(([key,,unit])=>{
+    const raw=num(p[key]);
+    const theirs = raw===null ? e[key].cash : plActualCash(key,raw);
+    expPay+=e[key].cash; slipPay+=theirs;
+    if(unit==="h"){
+      expH+=e[key].units;
+      slipH+= raw===null ? e[key].units : raw;
+    }
+  });
+  return {expH, slipH, expPay, slipPay};
+}
+
+/* ============ state ============ */
+let curDay = iso(new Date());
+const cur = () => mondayOf(curDay);
+let tab = "day";
+let plWeek = null;   /* payslip tab tracks its own week, set on first render */
+function plCur(){ if(!plWeek) plWeek=lastPaidWeek(); return plWeek; }
+
+/* payday is the Friday after the week ends, or the Thursday
+   before it if that Friday is a bank holiday */
+function paydayOf(k){
+  let p=addDays(k,11);
+  while(BH.has(p)) p=addDays(p,-1);
+  return p;
+}
+const DAYSHORT=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+function paydayLabel(k){
+  const p=paydayOf(k);
+  return "paid "+DAYSHORT[dowIndex(p)]+" "+shortDate(p);
+}
+/* the last week whose payday has already been and gone */
+function lastPaidWeek(){
+  let k=mondayOf(iso(new Date()));
+  const today=iso(new Date());
+  for(let i=0;i<60;i++){
+    if(paydayOf(k)<=today) return k;
+    k=addDays(k,-7);
+  }
+  return k;
+}
+
+/* ============ header + hero ============ */
+function render(){
+  const c=calc(cur());
+  const sun=addDays(cur(),6);
+  const T=document.getElementById("wkTitle"), U=document.getElementById("wkSub");
+
+  if(tab==="day"){
+    T.textContent=DAYNAME[dowIndex(curDay)];
+    U.textContent=shortDate(curDay)+(curDay===iso(new Date())?" · today":"");
+  }else if(tab==="pay"){
+    T.textContent=shortDate(plCur())+" – "+shortDate(addDays(plCur(),6));
+    U.textContent=paydayLabel(plCur());
+  }else if(tab==="history"){
+    T.textContent="History";
+    U.textContent="every week you have logged";
+  }else{
+    T.textContent=shortDate(cur())+" – "+shortDate(sun);
+    U.textContent=paydayLabel(cur());
+  }
+
+  /* arrows: none on history, and the payslip cannot run past the last payday */
+  const P=document.getElementById("prev"), N=document.getElementById("next");
+  P.style.visibility = tab==="history" ? "hidden" : "visible";
+  N.style.visibility = tab==="history" ? "hidden" : "visible";
+  N.disabled = tab==="pay" && plCur()>=lastPaidWeek();
+  N.style.opacity = N.disabled ? ".35" : "1";
+
+  const fig=document.getElementById("heroFig"), sub=document.getElementById("heroSub"), strip=document.getElementById("heroStrip");
+  if(tab==="day"){
+    const r=load().days[curDay]||{}, mins=duration(r.start,r.end);
+    const isBH=BH.has(curDay)&&dowIndex(curDay)<5&&mins===0;
+    const isHol=!isBH&&!!r.hol&&dowIndex(curDay)<5&&mins===0;
+    if(isBH){
+      fig.innerHTML=S("bhHours")+"<small>h</small>";
+      sub.textContent="bank holiday, paid not worked";
+    }else if(isHol){
+      fig.innerHTML=S("holHours")+"<small>h</small>";
+      sub.textContent="holiday, paid not worked";
+    }else{
+      const h=Math.floor(mins/60), m=mins%60;
+      fig.innerHTML=mins?h+"<small>h "+String(m).padStart(2,"0")+"</small>":"—";
+      sub.textContent=mins?"on the clock":"nothing logged yet";
+    }
+    const add=c.beforePension-calc(cur(),curDay).beforePension;
+    const dv=driveInfo(curDay,r);
+    const rb=restBefore(curDay);
+    strip.innerHTML=
+      "<span>rest <b>"+(rb===null?"—":hm(rb))+"</b></span>"+
+      "<span>drove <b>"+(dv.mins?dec(dv.mins).toFixed(2)+"h":"—")+"</b></span>"+
+      "<span>adds <b>"+money(add)+"</b></span>";
+  }else if(tab==="pay"){
+    const pc=calc(plCur()), t=plTotals(plCur(),pc);
+    const gap=t.slipPay-t.expPay, gh=t.slipH-t.expH;
+    const p=t.expPay.toFixed(2).split(".");
+    fig.innerHTML="£"+(+p[0]).toLocaleString("en-GB")+"<small>."+p[1]+"</small>";
+    sub.textContent = !plHasAny(plCur()) ? "expected before tax"
+      : Math.abs(gap)<0.01 ? "expected before tax · slip matches"
+      : "£"+Math.abs(gap).toFixed(2)+" "+(gap<0?"short":"over")+" on the slip";
+    strip.innerHTML=
+      "<span>logged <b>"+n2(t.expH)+"h</b></span>"+
+      "<span>slip <b>"+n2(t.slipH)+"h</b></span>"+
+      "<span>gap <b>"+(Math.abs(gh)<0.005?"none":(gh>0?"+":"−")+n2(Math.abs(gh))+"h")+"</b></span>";
+  }else if(tab==="history"){
+    const hs=histSummary();
+    fig.innerHTML=hs.weeks+"<small> "+(hs.weeks===1?"week":"weeks")+"</small>";
+    sub.textContent="logged so far";
+    strip.innerHTML=
+      "<span>hours <b>"+n2(hs.hours)+"</b></span>"+
+      "<span>checked <b>"+hs.checked+"</b></span>"+
+      "<span>off <b>"+hs.off+"</b></span>";
+  }else{
+    const p=c.net.toFixed(2).split(".");
+    fig.innerHTML="£"+(+p[0]).toLocaleString("en-GB")+"<small>."+p[1]+"</small>";
+    sub.textContent="take-home this week";
+    strip.innerHTML=
+      "<span>worked <b>"+hm(c.workedMins)+"</b></span>"+
+      "<span>paid <b>"+hm(c.paidMins)+"</b></span>"+
+      "<span>gross <b>"+money(c.cash)+"</b></span>";
+  }
+
+  if(tab==="day")     renderDay(c);
+  if(tab==="week"){   renderWeek(c); renderLedger(c); }
+  if(tab==="hours")   renderHours(c);
+  if(tab==="pay")     renderPayslip(calc(plCur()));
+  if(tab==="history") renderHistory();
+  if(tab==="more"){   renderSetup(); renderBackup(); renderBH(); }
+}
+
+/* ============ day view ============ */
+function renderDay(c){
+  const d=load(), r=d.days[curDay]||{}, box=document.getElementById("dayBody");
+  const i=dowIndex(curDay), isBH=BH.has(curDay)&&i<5;
+  const worked=duration(r.start,r.end);
+  const dv=driveInfo(curDay,r);
+  const rb=restBefore(curDay), kind=restKind(rb);
+  const rt=REST_TEXT[kind];
+  const slide=dv.mins?dec(dv.mins):9;
+  /* holiday can only be booked on a weekday that is not already a bank holiday */
+  const canHol = dowIndex(curDay)<5 && !BH.has(curDay);
+
+  /* how many reduced rests are already gone, so we know whether the 9 is on */
+  const redUsed=reducedSinceWeekly(curDay);
+  const nineLeft=redUsed<3;
+
+  /* once he has clocked out: earliest he can start again */
+  const eMs=endMs(curDay,r);
+  let nextBlock="";
+  if(eMs!==null){
+    const at=ms=>{
+      const dt=new Date(ms);
+      const hhmm=String(dt.getHours()).padStart(2,"0")+":"+String(dt.getMinutes()).padStart(2,"0");
+      const dayGap=Math.round((fromIso(iso(dt)).getTime()-fromIso(curDay).getTime())/86400000);
+      return hhmm+(dayGap===0?" today":dayGap===1?" tomorrow":" "+shortDate(iso(dt)));
+    };
+    nextBlock=`
+      <h2>Earliest you can start again</h2>
+      <div class="nxt">
+        <div><b>${at(eMs+11*3600000)}</b><span>full 11-hour rest</span><small>nothing used up</small></div>
+        <div class="${nineLeft?"":"off"}"><b>${at(eMs+9*3600000)}</b><span>reduced 9-hour rest</span>
+          <small>${nineLeft?(3-redUsed)+" of 3 left":"none left"}</small></div>
+      </div>`;
+  }
+
+  /* once he has clocked in but not out: latest he can finish */
+  const sMs=startMs(curDay,r);
+  let lastBlock="";
+  if(sMs!==null && eMs===null){
+    const at=ms=>{
+      const dt=new Date(ms);
+      const hhmm=String(dt.getHours()).padStart(2,"0")+":"+String(dt.getMinutes()).padStart(2,"0");
+      const dayGap=Math.round((fromIso(iso(dt)).getTime()-fromIso(curDay).getTime())/86400000);
+      return hhmm+(dayGap===0?" today":dayGap===1?" tomorrow":" "+shortDate(iso(dt)));
+    };
+    lastBlock=`
+      <h2>Latest you can finish</h2>
+      <div class="nxt">
+        <div><b>${at(sMs+13*3600000)}</b><span>13 hours</span><small>leaves a full 11-hour rest</small></div>
+        <div class="${nineLeft?"":"off"}"><b>${at(sMs+15*3600000)}</b><span>15 hours</span>
+          <small>${nineLeft?"uses a reduced 9":"none left"}</small></div>
+      </div>
+      <p class="note">The daily rest has to start within 24 hours of the last one ending, so the longer shift only works if you cut the rest after it.</p>`;
+  }
+
+  box.innerHTML=`
+    ${isBH?`<p class="note" style="margin-top:14px">Bank holiday. Leave it blank and it pays ${S("bhHours")} hours at the basic rate. Put times in and it pays at the Sunday rate instead, minimum ${S("sunMin")} hours.</p>`:""}
+    ${r.hol&&!worked?`<p class="note" style="margin-top:14px">Booked as holiday. It pays ${S("holHours")} hours at the basic rate, counts towards the 50, and keeps your attendance allowance.</p>`:""}
+    <div class="bigtimes">
+      <input class="st" inputmode="numeric" maxlength="4" placeholder="0000" value="${r.start||""}" aria-label="Start">
+      <span class="dash">to</span>
+      <input class="fi" inputmode="numeric" maxlength="4" placeholder="0000" value="${r.end||""}" aria-label="Finish">
+    </div>
+    <div class="tlabels"><span>start</span><i></i><span>finish</span></div>
+
+    <div class="rest">
+      <div class="top"><span class="nm">Rest before this shift</span>
+        <span class="vv ${rt[1]}">${rb===null?"—":hm(rb)}</span></div>
+      <div class="note">${rt[2]}</div>
+    </div>
+
+    <div class="sl">
+      <div class="row"><span class="nm">Driving</span>
+        <span class="vv ${dv.assumed||!dv.mins?"guess":""}" id="dvVal">${slide.toFixed(2).replace(/\.?0+$/,"")} h${dv.assumed?" assumed":dv.mins?"":" assumed"}</span></div>
+      <input type="range" id="dvRange" min="0" max="11" step="0.25" value="${slide}">
+      <div class="ticks"><span>0</span><span>3</span><span>6</span><span>9</span><span>11</span></div>
+    </div>
+
+    <div class="field">
+      <label>Night out<span class="hint">pays £${n2(S("nightOut")+S("meal"))} with the meal</span></label>
+      <button class="chip nt${r.night?" on":""}">${r.night?"yes":"no"}</button>
+    </div>
+    ${canHol?`<div class="field">
+      <label>Holiday<span class="hint">${worked?"clear the times to book it off":"pays "+S("holHours")+" hours towards the 50"}</span></label>
+      <button class="chip hol${r.hol?" on":""}"${worked?" disabled":""}>${r.hol?"booked":"no"}</button>
+    </div>`:""}
+
+    <div class="cards">
+      <div><b>${worked?hm(worked):"—"}</b><span>on the clock</span></div>
+      <div><b class="amber">${hm(c.workedMins)}</b><span>week so far</span></div>
+    </div>
+    ${lastBlock}${nextBlock}
+    <button class="linkrow" id="toWeek">See the whole week ›</button>
+  `;
+
+  const set=(k,v)=>{ const rec=d.days[curDay]||(d.days[curDay]={}); if(v===""||v===null||v===undefined) delete rec[k]; else rec[k]=v; save(); render(); };
+  const st=box.querySelector(".st"), fi=box.querySelector(".fi");
+  st.addEventListener("change",e=>set("start",e.target.value.replace(/\D/g,"")));
+  fi.addEventListener("change",e=>{
+    const v=e.target.value.replace(/\D/g,"");
+    set("end",v);
+    if(v.length===4) offerBackup();   /* clocking out — the tap is still live */
+  });
+  st.addEventListener("input",e=>{ if(e.target.value.length===4) fi.focus(); });
+  box.querySelector(".nt").addEventListener("click",()=>set("night",r.night?"":true));
+  const holBtn=box.querySelector(".hol");
+  if(holBtn) holBtn.addEventListener("click",()=>set("hol",r.hol?"":true));
+
+  const rng=box.querySelector("#dvRange"), val=box.querySelector("#dvVal");
+  rng.addEventListener("input",e=>{ val.textContent=Number(e.target.value).toFixed(2).replace(/\.?0+$/,"")+" h"; val.className="vv"; });
+  rng.addEventListener("change",e=>set("drive",e.target.value));
+  box.querySelector("#toWeek").addEventListener("click",()=>switchTab("week"));
+}
+
+/* ============ week view ============ */
+function renderWeek(c){
+  const d=load(), today=iso(new Date()), box=document.getElementById("days");
+  box.innerHTML="";
+  c.dates.forEach((ds,i)=>{
+    const r=d.days[ds]||{}, mins=duration(r.start,r.end);
+    const isBH=BH.has(ds)&&i<5;
+    const b=document.createElement("button");
+    b.className="wrow"+(ds===today?" today":"");
+    let sub;
+    if(isBH&&mins===0) sub="Bank holiday · "+S("bhHours")+"h paid";
+    else if(r.hol&&mins===0&&i<5) sub="Holiday · "+S("holHours")+"h paid";
+    else if(mins) sub=(r.start||"")+" – "+(r.end||"")+(r.night?" · night out":"");
+    else sub="not logged";
+    const isHol = r.hol&&mins===0&&i<5;
+    b.innerHTML=`<span class="nm"><b>${DAYNAME[i]} <span style="font-weight:400;color:var(--dim)">${shortDate(ds)}</span></b>
+      <span>${sub}</span></span>
+      <span class="hrs${mins||(isBH&&mins===0)||isHol?"":" zero"}">${mins?hm(mins):(isBH?hm(S("bhHours")*60):isHol?hm(S("holHours")*60):"—")}</span>
+      <span class="arw">›</span>`;
+    b.addEventListener("click",()=>{ curDay=ds; switchTab("day"); window.scrollTo(0,0); });
+    box.appendChild(b);
+  });
+  const wk=d.weeks[cur()]||{};
+  const nameOf=ds=>DAYNAME[dowIndex(ds)];
+  let aVal,aCls,aNote;
+  if(c.attMissed.length){
+    aVal="lost"; aCls="over";
+    aNote="No hours on "+c.attMissed.map(nameOf).join(", ")+". Bank holidays and booked holiday still count as attended.";
+  }else if(c.attPending.length){
+    aVal="on track"; aCls="warn";
+    aNote="Still to log: "+c.attPending.map(nameOf).join(", ")+".";
+  }else{
+    aVal=money(S("attendance")); aCls="ok";
+    aNote="Every weekday covered, so the allowance is earned.";
+  }
+  document.getElementById("attStat").innerHTML=`<div class="stat">
+    <div class="top"><span class="name">Attendance allowance</span><span class="val ${aCls}">${aVal}</span></div>
+    <div class="note">${aNote}</div></div>`;
+  document.getElementById("sspIn").value=wk.ssp||"";
+
+  /* whole-week holiday button */
+  const holBtn=document.getElementById("holWeek"), holNote=document.getElementById("holNote");
+  const wkDays=[0,1,2,3,4].map(i=>addDays(cur(),i));
+  const bookable=wkDays.filter(ds=>!BH.has(ds) && duration((d.days[ds]||{}).start,(d.days[ds]||{}).end)===0);
+  const booked=wkDays.filter(ds=>(d.days[ds]||{}).hol && !BH.has(ds) && duration((d.days[ds]||{}).start,(d.days[ds]||{}).end)===0);
+  const clash=wkDays.filter(ds=>duration((d.days[ds]||{}).start,(d.days[ds]||{}).end)>0);
+  const allBooked = bookable.length>0 && booked.length===bookable.length;
+
+  holBtn.textContent = allBooked ? "Clear the holiday on this week" : "Book the whole week off";
+  holBtn.disabled = bookable.length===0;
+  holBtn.style.opacity = holBtn.disabled ? ".45" : "1";
+
+  const bhThisWeek=wkDays.filter(ds=>BH.has(ds));
+  const bits=[];
+  if(booked.length) bits.push(booked.length+(booked.length===1?" day":" days")+" booked, "+hm(booked.length*S("holHours")*60)+" paid");
+  if(clash.length) bits.push(clash.length===1?"Monday–Friday has 1 day with hours on it, so that one is left alone":clash.length+" days have hours on them, so those are left alone");
+  if(bhThisWeek.length) bits.push(bhThisWeek.length===1?"1 bank holiday here already":bhThisWeek.length+" bank holidays here already");
+  holNote.textContent = bits.length
+    ? bits.join(". ")+"."
+    : "Books Monday to Friday off at "+S("holHours")+" hours a day. You keep the attendance allowance, and any Saturday or Sunday still pays as normal.";
+
+  holBtn.onclick=()=>{
+    const dd=load();
+    if(allBooked) booked.forEach(ds=>{ if(dd.days[ds]) delete dd.days[ds].hol; });
+    else bookable.forEach(ds=>{ (dd.days[ds]||(dd.days[ds]={})).hol=true; });
+    save(); render();
+  };
+}
+
+function renderLedger(c){
+  const box=document.getElementById("ledger");
+  let h="";
+  c.lines.forEach(l=>{ h+=`<div class="lrow"><span class="d">${l.name}</span><span class="u">${l.units}</span><span class="c">${n2(l.cash)}</span></div>`; });
+  h+=`<div class="lrow neg"><span class="d">Pension</span><span class="u"></span><span class="c">−${n2(c.pension)}</span></div>`;
+  h+=`<div class="lrow tot"><span class="d">Payments</span><span class="u"></span><span class="c">${n2(c.cash)}</span></div>`;
+  h+=`<div class="lrow"><span class="d">Taxable pay</span><span class="u"></span><span class="c">${n2(c.taxable)}</span></div>`;
+  h+=`<div class="lrow neg"><span class="d">Tax</span><span class="u"></span><span class="c">−${n2(c.tax)}</span></div>`;
+  h+=`<div class="lrow neg"><span class="d">National Insurance</span><span class="u"></span><span class="c">−${n2(c.ni)}</span></div>`;
+  h+=`<div class="lrow tot"><span class="d">Net</span><span class="u"></span><span class="c">${n2(c.net)}</span></div>`;
+  box.innerHTML=h;
+}
+
+/* ============ drivers' hours ============ */
+function stat(name,val,note,frac,forceCls){
+  const pct=Math.min(100,Math.round((frac||0)*100));
+  const cls=forceCls||(frac>1?"over":frac>0.85?"warn":"ok");
+  return `<div class="stat">
+    <div class="top"><span class="name">${name}</span><span class="val ${cls}">${val}</span></div>
+    <div class="bar"><i class="${cls==="ok"?"":cls}" style="width:${pct}%"></i></div>
+    ${note?`<div class="note">${note}</div>`:""}
+  </div>`;
+}
+function renderHours(c){
+  const prev=calc(addDays(cur(),-7));
+  const fort=c.driveMins+prev.driveMins;
+  const dh=[];
+  const asum=c.assumedDrive?" "+c.assumedDrive+" day"+(c.assumedDrive===1?"":"s")+" assumed at 9 hours — slide the driving figure on the day to correct it.":"";
+  dh.push(stat("Driving this week",dec(c.driveMins).toFixed(1)+" / 56 h",asum.trim(),c.driveMins/(56*60)));
+  dh.push(stat("Driving this fortnight",dec(fort).toFixed(1)+" / 90 h","with week beginning "+shortDate(addDays(cur(),-7)),fort/(90*60)));
+  dh.push(stat("10-hour driving days",c.extDrive+" / 2 used",(2-c.extDrive)>0?(2-c.extDrive)+" left this week":"none left — 9 hours max now",c.extDrive/2));
+  document.getElementById("dhWeek").innerHTML=dh.join("");
+
+  const rest=[];
+  const redUsed=reducedSinceWeekly(addDays(cur(),6));
+  rest.push(stat("Reduced daily rests",redUsed+" / 3 used",
+    (3-redUsed)>0?(3-redUsed)+" left before your next weekly rest":"none left — 11 hours needed now",redUsed/3));
+  if(c.shortRest) rest.push(stat("Rests under 9 hours",c.shortRest+" this week","Worked out from your start and finish times. Check these against the tacho.",1,"over"));
+
+  const wrMins=weeklyRestOf(cur()), pwrMins=weeklyRestOf(addDays(cur(),-7));
+  const isRed = m => m>=24*60 && m<45*60;
+  let wrVal, wrCls, wrNote;
+  if(wrMins>=45*60){
+    wrVal=hm(wrMins); wrCls="ok";
+    wrNote="A full weekly rest, worked out from your finish and start times.";
+  }else if(wrMins>=24*60){
+    wrVal=hm(wrMins); wrCls=isRed(pwrMins)?"over":"warn";
+    wrNote=isRed(pwrMins)
+      ? "Reduced two weeks running — that is not allowed. Check it against your tacho."
+      : hm(45*60-wrMins)+" owed back, in one block attached to a rest of 9 hours or more, by the end of "+shortDate(addDays(cur(),27))+".";
+  }else{
+    wrVal=wrMins?hm(wrMins):"—"; wrCls=wrMins?"warn":"";
+    wrNote=wrMins
+      ? "No weekly rest in this week yet. That is the longest break so far."
+      : "Fills itself in once there are enough start and finish times to find a break.";
+  }
+  rest.push(`<div class="stat">
+    <div class="top"><span class="name">Weekly rest taken</span><span class="val ${wrCls}">${wrVal}</span></div>
+    <div class="note">${wrNote}</div></div>`);
+  document.getElementById("dhRest").innerHTML=rest.join("");
+
+  const wt=[];
+  wt.push(stat("Working time this week",dec(c.workedMins).toFixed(1)+" / 60 h","the hard ceiling for any single week",c.workedMins/(60*60)));
+  let tot=0,n=0;
+  for(let i=0;i<17;i++){ const cc=calc(addDays(cur(),-7*i)); if(cc.hasData){ tot+=cc.workedMins; n++; } }
+  const avg=n?dec(tot)/n:0;
+  wt.push(stat("Average week",avg.toFixed(1)+" / 48 h","over the last "+n+" week"+(n===1?"":"s")+" you logged",avg/48));
+  document.getElementById("dhWtd").innerHTML=wt.join("");
+}
+
+/* ============ payslip, line by line ============ */
+function renderPayslip(c){
+  const d=load(), k=plCur(), p=plSaved(k), e=plExpected(k,c);
+  const box=document.getElementById("plList");
+  box.innerHTML="";
+
+  PL_LINES.forEach(([key,label,unit,rateKey])=>{
+    const exp=e[key];
+    const raw=num(p[key]);
+    const row=document.createElement("div");
+    row.className="pl";
+
+    if(unit==="n"){
+      const v = raw===null ? exp.units : raw;
+      const g = raw===null ? null : raw-exp.units;
+      row.innerHTML=`
+        <div class="top"><span class="nm">${label}</span><span class="exp">expected ${exp.units} · ${money(exp.cash)}</span></div>
+        <input type="range" class="pr" min="0" max="6" step="1" value="${v}">
+        <div class="ticks"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span></div>
+        <div class="sub"><b class="pv">${v} on the slip</b>${
+          g===null ? " · not entered yet"
+          : g===0  ? " · matches"
+          : " · "+(g>0?"+":"−")+Math.abs(g)+" · "+(g>0?"+":"−")+money(Math.abs(g)*(S("nightOut")+S("meal")))}</div>`;
+
+    }else if(unit==="yn"){
+      const paid = raw===null ? exp.units===1 : raw===1;
+      const g = raw===null ? null : (raw?1:0)-exp.units;
+      row.innerHTML=`
+        <div class="top"><span class="nm">${label}</span><span class="exp">expected ${exp.units?"yes":"no"} · ${money(exp.cash)}</span></div>
+        <div class="bot">
+          <button class="chip ynb${paid?" on":""}">${paid?"on the slip":"not on the slip"}</button>
+          <span class="gap" style="color:${g===null?"var(--dim)":g===0?"var(--green)":"var(--red)"}">${
+            g===null?"—":g===0?"ok":(g>0?"+":"−")+money(S("attendance"))}</span>
+        </div>`;
+
+    }else if(unit==="h"){
+      const shown = raw===null ? "" : p[key];
+      const gapH  = raw===null ? null : raw-exp.units;
+      const gapP  = raw===null ? null : gapH*S(rateKey);
+      row.innerHTML=`
+        <div class="top"><span class="nm">${label}</span><span class="exp">logged ${n2(exp.units)} h</span></div>
+        <div class="bot">
+          <input class="pin" inputmode="decimal" placeholder="${n2(exp.units)}" value="${shown}">
+          <span class="unit">hours</span>
+          <span class="gap" style="color:${gapH===null?"var(--dim)":Math.abs(gapH)<0.005?"var(--green)":"var(--red)"}">${
+            gapH===null ? "—" : Math.abs(gapH)<0.005 ? "ok" : (gapH>0?"+":"−")+n2(Math.abs(gapH))+" h"
+          }</span>
+        </div>
+        ${gapH!==null&&Math.abs(gapH)>=0.005
+          ? `<div class="sub">${(gapP>0?"+":"−")+money(Math.abs(gapP))} at ${money(S(rateKey))} an hour</div>`
+          : ""}`;
+
+    }else{
+      const shown = raw===null ? "" : p[key];
+      const gap = raw===null ? null : raw-exp.cash;
+      row.innerHTML=`
+        <div class="top"><span class="nm">${label}</span><span class="exp">expected ${money(exp.cash)}</span></div>
+        <div class="bot">
+          <input class="pin" inputmode="decimal" placeholder="${n2(exp.cash)}" value="${shown}">
+          <span class="unit">£</span>
+          <span class="gap" style="color:${gap===null?"var(--dim)":Math.abs(gap)<0.005?"var(--green)":"var(--red)"}">${
+            gap===null ? "—" : Math.abs(gap)<0.005 ? "ok" : (gap>0?"+":"−")+money(Math.abs(gap))
+          }</span>
+        </div>`;
+    }
+
+    const commit=v=>{
+      const w=d.weeks[k]=d.weeks[k]||{};
+      w.payslip=w.payslip||{};
+      if(v==="") delete w.payslip[key]; else w.payslip[key]=v;
+      save(); render();
+    };
+    const inp=row.querySelector(".pin");
+    if(inp) inp.addEventListener("change",ev=>commit(ev.target.value.trim()));
+    const rng=row.querySelector(".pr");
+    if(rng){
+      const pv=row.querySelector(".pv");
+      rng.addEventListener("input",ev=>{ pv.textContent=ev.target.value+" on the slip"; });
+      rng.addEventListener("change",ev=>commit(ev.target.value));
+    }
+    const yn=row.querySelector(".ynb");
+    if(yn) yn.addEventListener("click",()=>{
+      const now = raw===null ? (e[key].units===1?1:0) : raw;
+      commit(String(now?0:1));
+    });
+    box.appendChild(row);
+  });
+
+  /* totals — hours first, pounds underneath */
+  const t=plTotals(k,c);
+  const hGap=t.slipH-t.expH, pGap=t.slipPay-t.expPay;
+  const col=g=>Math.abs(g)<0.005?"var(--green)":"var(--red)";
+  document.getElementById("plTot").innerHTML=
+    `<div class="lrow"><span class="d" style="color:var(--text)">Line</span><span class="u">logged</span><span class="c">slip</span></div>
+     <div class="lrow"><span class="d">Paid hours</span><span class="u">${n2(t.expH)}</span>
+       <span class="c" style="color:${col(hGap)}">${n2(t.slipH)}</span></div>
+     <div class="lrow tot"><span class="d">Before tax</span><span class="u">${n2(t.expPay)}</span>
+       <span class="c" style="color:${col(pGap)}">${n2(t.slipPay)}</span></div>`;
+
+  const worst=[];
+  PL_LINES.forEach(([key,label,unit,rateKey])=>{
+    const raw=num(p[key]); if(raw===null) return;
+    if(unit==="h"){
+      const gh=raw-e[key].units;
+      if(Math.abs(gh)>=0.005) worst.push({label,gh,gp:gh*S(rateKey)});
+    }else{
+      const gp=plActualCash(key,raw)-e[key].cash;
+      if(Math.abs(gp)>=0.01) worst.push({label,gh:null,gp});
+    }
+  });
+  worst.sort((a,b)=>Math.abs(b.gp)-Math.abs(a.gp));
+
+  const note=document.getElementById("plNote");
+  if(!plHasAny(k))
+    note.textContent="Type the hours off each line of the payslip. Anything you leave blank is taken as agreeing with what I logged, so you only need to fill in what looks off.";
+  else if(!worst.length)
+    note.textContent="Every line you entered matches what I logged. Nothing to chase.";
+  else{
+    const list=worst.slice(0,3).map(w=>
+      w.label+" "+(w.gp>0?"over":"short")+" by "+
+      (w.gh===null?money(Math.abs(w.gp)):n2(Math.abs(w.gh))+" h, "+money(Math.abs(w.gp)))
+    ).join(", ");
+    note.textContent=(Math.abs(hGap)<0.005
+      ? "The hours add up, but the lines do not match: "
+      : hGap<0 ? "You are "+n2(-hGap)+" hours light, "+money(-pGap)+" before tax. "
+               : "You were paid "+n2(hGap)+" hours more than I logged. ")+list+".";
+  }
+}
+
+/* ============ history ============ */
+function weeksWithData(){
+  const d=load(), keys=new Set();
+  Object.keys(d.days).forEach(ds=>keys.add(mondayOf(ds)));
+  Object.keys(d.weeks).forEach(k=>keys.add(k));
+  return [...keys].sort().reverse();
+}
+function renderHistory(){
+  const box=document.getElementById("histList");
+  const keys=weeksWithData().filter(k=>calc(k).hasData||plHasAny(k));
+  const note=document.getElementById("histNote");
+  if(!keys.length){
+    box.innerHTML=`<p class="note">Nothing logged yet. Fill in a day and it will show up here.</p>`;
+    if(note) note.textContent="";
+    return;
+  }
+  box.innerHTML="";
+  keys.forEach(k=>{
+    const c=calc(k);
+    const paid=paydayOf(k);
+    let tail, cls="";
+    if(plHasAny(k)){
+      const t=plTotals(k,c), gh=t.slipH-t.expH, gp=t.slipPay-t.expPay;
+      if(Math.abs(gh)<0.005 && Math.abs(gp)<0.01){ tail="slip matched"; cls="ok"; }
+      else if(Math.abs(gh)<0.005){ tail="slip "+(gp<0?"short ":"over ")+money(Math.abs(gp)); cls="bad"; }
+      else { tail="slip "+(gh<0?"short ":"over ")+n2(Math.abs(gh))+"h, "+money(Math.abs(gp)); cls="bad"; }
+    } else {
+      tail = paid<=iso(new Date()) ? "no slip checked" : "not paid yet";
+    }
+    const b=document.createElement("button");
+    b.className="hist";
+    b.innerHTML=`<span class="wk"><b>${shortDate(k)} – ${shortDate(addDays(k,6))}</b>
+      <span>paid ${shortDate(paid)} · <span class="${cls}">${tail}</span></span></span>
+      <span class="amt"><b>${hm(c.paidMins)}</b><span>${money(c.cash)} gross</span></span>`;
+    b.addEventListener("click",()=>{ plWeek=k; switchTab("pay"); });
+    box.appendChild(b);
+  });
+  if(note){
+    const hs=histSummary();
+    note.textContent = hs.off
+      ? "Tap any week to open its payslip check. "+hs.off+" of the "+hs.checked+" you have checked did not match."
+      : hs.checked
+        ? "Tap any week to open its payslip check. Everything you have checked so far matched."
+        : "Tap any week to open its payslip check.";
+  }
+}
+
+/* totals across every logged week, for the history hero */
+function histSummary(){
+  const keys=weeksWithData().filter(k=>calc(k).hasData||plHasAny(k));
+  let hours=0, checked=0, off=0;
+  keys.forEach(k=>{
+    const c=calc(k);
+    hours+=dec(c.paidMins);
+    if(plHasAny(k)){
+      checked++;
+      const t=plTotals(k,c);
+      if(Math.abs(t.slipH-t.expH)>=0.005||Math.abs(t.slipPay-t.expPay)>=0.01) off++;
+    }
+  });
+  return {weeks:keys.length, hours, checked, off};
+}
+
+/* ============ export ============ */
+function csv(){
+  const rows=[["Date","Day","Week beginning","Payday","Start","Finish","Hours worked","Bank holiday","Holiday","Night out",
+    "Driving h","Driving assumed","Rest before (h)","Rest type",
+    "Week holiday days","Week basic h","Week holiday h","Week OT h","Week Sat h","Week Sun h","Week BH worked h","Week nights",
+    "Week gross","Week tax","Week NI","Week net",
+    "Slip hours","Expected hours","Slip before tax","Expected before tax","Slip vs expected"]];
+  weeksWithData().sort().forEach(k=>{
+    const c=calc(k); if(!c.hasData&&!plHasAny(k)) return;
+    const t=plHasAny(k)?plTotals(k,c):null;
+    c.dates.forEach((ds,i)=>{
+      const r=load().days[ds]||{}, mins=duration(r.start,r.end);
+      const isBH=BH.has(ds)&&i<5&&mins===0;
+      const dv=driveInfo(ds,r), rb=restBefore(ds);
+      rows.push([ds,DAYNAME[i],k,paydayOf(k),r.start||"",r.end||"",dec(mins).toFixed(2),
+        isBH?"yes":"",(r.hol&&mins===0&&i<5&&!isBH)?"yes":"",r.night?"yes":"",
+        dv.mins?dec(dv.mins).toFixed(2):"",dv.assumed?"assumed":"",
+        rb===null?"":dec(rb).toFixed(2),rb===null?"":restKind(rb),
+        i===0?c.holDays:"",i===0?dec(c.basicWorked).toFixed(2):"",i===0?dec(c.holBasic).toFixed(2):"",i===0?dec(c.otMins).toFixed(2):"",
+        i===0?dec(c.satPaid).toFixed(2):"",i===0?dec(c.sunPaid).toFixed(2):"",
+        i===0?dec(c.bhWorkedPaid).toFixed(2):"",i===0?c.nights:"",
+        i===0?n2(c.cash):"",i===0?n2(c.tax):"",i===0?n2(c.ni):"",i===0?n2(c.net):"",
+        i===0&&t?n2(t.slipH):"",i===0&&t?n2(t.expH):"",
+        i===0&&t?n2(t.slipPay):"",i===0&&t?n2(t.expPay):"",
+        i===0&&t?n2(t.slipPay-t.expPay):""]);
+    });
+  });
+  return rows.map(r=>r.map(v=>/[",\n]/.test(v)?'"'+String(v).replace(/"/g,'""')+'"':v).join(",")).join("\n");
+}
+/* ============ backup ============ */
+function backupName(){ return "hourbook-backup-"+iso(new Date())+".json"; }
+function doBackup(){
+  download(backupName(),JSON.stringify(load()),"application/json");
+  const d=load(); d.settings.lastBackup=iso(new Date()); save();
+}
+function backupEvery(){
+  const v=load().settings.backupWeeks;
+  const n=Number(v===undefined||v===""?DEFAULTS.backupWeeks:v);
+  return (!isFinite(n)||n<=0)?0:Math.floor(n);
+}
+function backupDue(){
+  const wks=backupEvery();
+  if(!wks) return false;                         /* switched off */
+  const last=load().settings.lastBackup;
+  if(!last) return true;                          /* never backed up */
+  const days=Math.floor((Date.parse(iso(new Date()))-Date.parse(last))/86400000);
+  return days>=wks*7;
+}
+/* called from the finish-time handler, so it still has the tap behind it */
+function offerBackup(){
+  if(!backupDue()) return;
+  const wks=backupEvery();
+  const last=load().settings.lastBackup;
+  const when = last ? "It has been "+wks+(wks===1?" week":" weeks")+" since your last backup."
+                    : "You have never backed these hours up.";
+  if(confirm(when+"\n\nSave one now?")) doBackup();
+  else { const d=load(); d.settings.backupAsked=iso(new Date()); save(); }
+}
+
+function download(name,text,type){
+  const b=new Blob([text],{type:type||"text/plain"}), u=URL.createObjectURL(b);
+  const a=document.createElement("a"); a.href=u; a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(u); a.remove(); },1500);
+}
+
+/* ============ setup ============ */
+const SETUP_RATES=[
+  ["basicRate","Basic hourly rate","first {cap} hours"],
+  ["basicCap","Basic hours threshold","hours before overtime starts"],
+  ["otRate","Standard overtime","weekday hours above the threshold"],
+  ["satRate","Saturday rate","always overtime, outside the threshold"],
+  ["satMin","Saturday minimum","hours paid even if you work less"],
+  ["sunRate","Sunday rate","not confirmed — a guess until you see one"],
+  ["sunMin","Sunday minimum","also used for a bank holiday you work"],
+  ["nightOut","Night out","paid with the meal, one tick"],
+  ["meal","Meal allowance","goes with every night out"],
+  ["attendance","Attendance allowance","full week, no days missed"],
+  ["bhHours","Bank holiday hours","paid, not worked, counts towards the threshold"],
+  ["holHours","Holiday hours a day","paid, not worked, counts towards the threshold"]
+];
+const SETUP_DED=[
+  ["pension","Pension","flat amount each week, off before tax"],
+  ["bik","Medicash benefit","taxable but not paid in cash"],
+  ["taxFree","Tax free each week","1257L spread over 52 weeks"],
+  ["taxRate","Tax rate %","basic rate"],
+  ["niFree","NI threshold each week","primary threshold"],
+  ["niRate","NI rate %","main employee rate"]
+];
+function bhYearsLine(){
+  const ys=BH.years();
+  const now=String(new Date().getFullYear());
+  const last=ys[ys.length-1];
+  if(!BH.covers(now)) return "gov.uk has not published "+now+" yet, so bank holidays are not being counted for this year. Tap the button when you have signal.";
+  return "Bank holidays come from gov.uk, published up to the end of "+last+".";
+}
+function renderBH(){
+  const note=document.getElementById("bhNote");
+  if(!note) return;
+  const s0=load().settings;
+  const now=String(new Date().getFullYear());
+  const bits=[bhYearsLine()];
+  bits.push(s0.bhChecked?"Last checked "+prettyDate(s0.bhChecked)+".":"Not checked yet — it checks itself once a year when you have signal.");
+  if(s0.bhLastChange) bits.push(s0.bhLastChange);
+  note.textContent=bits.join(" ");
+  note.style.color = !BH.covers(now) ? "var(--red)" : (s0.bhLastChange ? "var(--amber)" : "var(--dim)");
+}
+function bhChangeText(res){
+  const p=[];
+  if(res.added.length) p.push("added "+res.added.map(prettyDate).join(", "));
+  if(res.removed.length) p.push("dropped "+res.removed.map(prettyDate).join(", "));
+  if(res.newYears.length) p.push("now covers "+res.newYears.join(", "));
+  return p.length?"Last update "+p.join(" and ")+".":"";
+}
+/* runs itself: once per calendar year, and on every launch while the
+   current year is still missing, so it catches up as soon as there is signal. */
+function bhAutoCheck(){
+  const s0=load().settings;
+  const nowY=new Date().getFullYear();
+  const checkedThisYear = s0.bhChecked && Number(s0.bhChecked.slice(0,4))>=nowY;
+  if(checkedThisYear && BH.covers(nowY)) return;
+  if(navigator.onLine===false) return;
+  checkBankHolidays().then(res=>{
+    const d=load();
+    d.settings.bhLastChange=bhChangeText(res);
+    save();
+    renderBH(); render();
+    const soon=addDays(iso(new Date()),365);
+    const near=res.added.concat(res.removed).filter(x=>x<=soon);
+    if(near.length) alert("Bank holidays have changed for the year ahead:\n\n"+near.map(prettyDate).join("\n")+"\n\nYour hours have been recalculated.");
+  }).catch(()=>{ renderBH(); });
+}
+function renderBackup(){
+  const sel=document.getElementById("bkEvery");
+  const note=document.getElementById("bkNote");
+  const wks=backupEvery();
+  sel.value=String(wks);
+  const last=load().settings.lastBackup;
+  const lastTxt = last ? "Last backup "+prettyDate(last)+"." : "You have not backed up yet.";
+  if(!wks){
+    note.textContent=lastTxt+" Asking is switched off — the backup file is still there whenever you want it.";
+    note.style.color="var(--dim)";
+  }else if(backupDue()){
+    note.textContent=lastTxt+" One is due — you will be asked next time you put a finish time in, or tap the button above now.";
+    note.style.color="var(--amber)";
+  }else{
+    note.textContent=lastTxt+" Next one due after "+wks+(wks===1?" week":" weeks")+".";
+    note.style.color="var(--dim)";
+  }
+}
+function prettyDate(is){ return DAYSHORT[dowIndex(is)]+" "+shortDate(is); }
+
+function renderSetup(){
+  const d=load();
+  const build=(list,el)=>{
+    el.innerHTML="";
+    list.forEach(([k,name,hint])=>{
+      const row=document.createElement("div");
+      row.className="field";
+      row.innerHTML=`<label>${name}<span class="hint">${hint.replace("{cap}",S("basicCap"))}</span></label>
+        <input inputmode="decimal" value="${d.settings[k]!==undefined&&d.settings[k]!==""?d.settings[k]:DEFAULTS[k]}">`;
+      row.querySelector("input").addEventListener("change",e=>{
+        const v=e.target.value.trim();
+        if(v==="") delete d.settings[k]; else d.settings[k]=Number(v);
+        save(); render();
+      });
+      el.appendChild(row);
+    });
+  };
+  build(SETUP_RATES,document.getElementById("setRates"));
+  build(SETUP_DED,document.getElementById("setDed"));
+  document.getElementById("verNote").textContent =
+    (memOnly?"Storage is blocked here, so nothing will survive a reload — it will work once it is on your phone. ":"")+
+    "Everything stays on this device. Tax and NI are close but not penny-exact; the payslip is the truth.";
+}
+
+/* ============ wiring ============ */
+const TABS=["day","week","hours","pay","history","more"];
+function switchTab(t){
+  tab=t;
+  /* Week is not on the bar any more — it is reached from the day view,
+     so keep Day lit while it is showing */
+  const lit = t==="week" ? "day" : t;
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.tab===lit));
+  TABS.forEach(k=>document.getElementById("tab-"+k).classList.toggle("hidden",k!==t));
+  window.scrollTo(0,0);
+  render();
+}
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
+function stepWeekNav(dir){
+  if(tab==="pay"){ plWeek=addDays(plCur(),7*dir); }
+  else if(tab==="history"){ return; }
+  else { curDay=addDays(curDay,(tab==="day"?1:7)*dir); }
+  render();
+}
+document.getElementById("prev").addEventListener("click",()=>stepWeekNav(-1));
+document.getElementById("next").addEventListener("click",()=>stepWeekNav(1));
+document.getElementById("todayBtn").addEventListener("click",()=>{
+  if(tab==="pay") plWeek=lastPaidWeek(); else curDay=iso(new Date());
+  render();
+});
+
+document.getElementById("sspIn").addEventListener("change",e=>{
+  const d=load(), w=d.weeks[cur()]=d.weeks[cur()]||{};
+  w.ssp=e.target.value; save(); render();
+});
+document.getElementById("plClear").addEventListener("click",()=>{
+  const d=load(), w=d.weeks[plCur()];
+  if(!w||!w.payslip) return;
+  if(!confirm("Clear the payslip figures for "+shortDate(plCur())+" – "+shortDate(addDays(plCur(),6))+"?")) return;
+  delete w.payslip; save(); render();
+});
+
+document.getElementById("expCsv").addEventListener("click",()=>download("hours-"+iso(new Date())+".csv",csv(),"text/csv"));
+document.getElementById("copyCsv").addEventListener("click",async e=>{
+  try{ await navigator.clipboard.writeText(csv()); e.target.textContent="Copied"; }
+  catch(err){ e.target.textContent="Could not copy — use the download"; }
+  setTimeout(()=>{ e.target.textContent="Copy CSV to clipboard"; },1800);
+});
+document.getElementById("expJson").addEventListener("click",()=>{ doBackup(); render(); });
+document.getElementById("bkEvery").addEventListener("change",e=>{
+  const d=load(); d.settings.backupWeeks=Number(e.target.value); save(); renderBackup();
+});
+document.getElementById("impJson").addEventListener("click",()=>document.getElementById("fileIn").click());
+document.getElementById("fileIn").addEventListener("change",e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const fr=new FileReader();
+  fr.onload=()=>{
+    try{
+      const inc=JSON.parse(fr.result);
+      if(!inc || typeof inc!=="object" || (!inc.days && !inc.weeks && !inc.settings))
+        throw new Error("not a backup");
+      const incDays=inc.days||{}, incWeeks=inc.weeks||{};
+      const keys=Object.keys(incDays);
+      const clash=keys.filter(k=>mem.days[k]).length;
+      const fresh=keys.length-clash;
+      if(clash && !confirm(clash+(clash===1?" day in this backup is":" days in this backup are")+
+        " already on the phone. Carry on and the backup wins on those."+
+        (fresh?" The other "+fresh+" would be added.":""))) return;
+      mem.days=Object.assign(mem.days,incDays);
+      mem.weeks=Object.assign(mem.weeks,incWeeks);
+      mem.settings=Object.assign(mem.settings,inc.settings||{});
+      save(); render();
+      alert("Restored "+keys.length+(keys.length===1?" day":" days")+
+        " and "+Object.keys(incWeeks).length+" week"+(Object.keys(incWeeks).length===1?"":"s")+".");
+    }catch(err){ alert("That file would not open. Pick the backup .json."); }
+  };
+  fr.readAsText(f);
+  e.target.value="";
+});
+document.getElementById("wipe").addEventListener("click",()=>{
+  const dayCount=Object.keys(mem.days||{}).length;
+  const wkCount=Object.keys(mem.weeks||{}).length;
+  if(!dayCount && !wkCount){ alert("There is nothing logged to erase."); return; }
+
+  /* three gates, because this cannot be undone */
+  if(!confirm("Erase "+dayCount+(dayCount===1?" day":" days")+" and "+
+      wkCount+" week"+(wkCount===1?"":"s")+" of hours, plus your rates?\n\n"+
+      "This cannot be undone.")) return;
+
+  if(!confirm("Are you sure? If you have not downloaded a backup, these hours are gone for good.\n\n"+
+      "Tap Cancel to go back and export first.")) return;
+
+  const typed=prompt("Last step. Type ERASE in capitals to confirm.");
+  if(typed===null) return;
+  if(typed.trim().toUpperCase()!=="ERASE"){ alert("Not erased \u2014 nothing was changed."); return; }
+
+  mem={days:{},weeks:{},settings:{}}; save(); render();
+  alert("All hours and settings erased.");
+});
+
+load(); render();
+
+document.getElementById("bhCheck").addEventListener("click",()=>{
+  const b=document.getElementById("bhCheck"), note=document.getElementById("bhNote");
+  b.disabled=true; const was=b.textContent; b.textContent="Checking\u2026";
+  checkBankHolidays().then(res=>{
+    const d=load(); d.settings.bhLastChange=bhChangeText(res); save();
+    renderBH(); render();
+    if(!res.added.length && !res.removed.length && !res.newYears.length){
+      note.textContent=bhYearsLine()+" Checked just now \u2014 nothing had changed.";
+      note.style.color="var(--green)";
+    }
+  }).catch(err=>{
+    note.textContent="Could not reach gov.uk ("+err.message+"). Nothing was changed \u2014 the dates already in the app are still being used. Try again when you have signal.";
+    note.style.color="var(--red)";
+  }).finally(()=>{ b.disabled=false; b.textContent=was; });
+});
+
+/* ---- keep working with no signal, and keep the data ----
+   the service worker pins the page so it opens offline.
+   persist() asks iOS not to evict the hours under storage pressure.
+   both are optional: if either is unavailable the app carries on. */
+if("serviceWorker" in navigator && location.protocol.startsWith("http")){
+  window.addEventListener("load",()=>{
+    navigator.serviceWorker.register("./sw.js").catch(()=>{});
+  });
+}
+bhAutoCheck();
+if(navigator.storage && navigator.storage.persist){
+  navigator.storage.persisted().then(ok=>{ if(!ok) navigator.storage.persist().catch(()=>{}); }).catch(()=>{});
+}
+</script>
+</body>
+</html>
