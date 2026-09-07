@@ -191,11 +191,20 @@ nav button.on .g{opacity:1}
 .tlabels span{flex:1;text-align:center}
 .tlabels i{width:26px;flex:none}
 
-.sl{padding:12px 0 6px;border-bottom:1px solid var(--rule)}
-.sl .row{display:flex;align-items:baseline;gap:10px}
-.sl .row .nm{font-size:14.5px;flex:1}
-.sl .row .vv{font-size:17px;font-weight:600;color:var(--amber)}
-.sl .row .vv.guess{color:var(--dim);font-weight:400;font-size:14.5px}
+.durs{padding:10px 0 12px;border-bottom:1px solid var(--rule)}
+.durs .dur{display:flex;align-items:center;gap:10px;margin:6px 0}
+.durs .dur label{flex:1;font-size:14.5px}
+.durs .dur input{
+  width:88px;flex:none;height:42px;text-align:center;font-size:19px;letter-spacing:.04em;
+  background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:0;
+}
+.durs .dur input:focus{outline:none;border-color:var(--amber);background:#FFF8EE;box-shadow:0 0 0 3px rgba(167,95,7,.12)}
+.durs .wt{display:flex;align-items:baseline;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--rule)}
+.durs .wt .nm{flex:1;font-size:14.5px}
+.durs .wt .vv{font-size:17px;font-weight:600;color:var(--amber)}
+.durs .wt .vv.guess{color:var(--dim);font-weight:400;font-size:14.5px}
+.durs .note{font-size:12.5px;color:var(--dim);margin-top:6px}
+
 input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:36px;background:transparent;margin:0}
 input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:var(--panel-2);border:1px solid var(--rule)}
 input[type=range]::-webkit-slider-thumb{
@@ -204,7 +213,6 @@ input[type=range]::-webkit-slider-thumb{
 }
 input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--panel-2)}
 input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;background:var(--amber);border:3px solid #fff}
-.ticks{display:flex;justify-content:space-between;font-size:11.5px;color:var(--dim);margin-top:-4px}
 
 .rest{padding:12px 0;border-bottom:1px solid var(--rule)}
 .rest .top{display:flex;align-items:baseline;gap:10px}
@@ -304,7 +312,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
     <div id="dhRest"></div>
     <h2>Working time</h2>
     <div id="dhWtd"></div>
-    <p class="note">Counts only what you typed in. Your tachograph is the record that matters — this is a rough running tally, not a compliance tool.</p>
+    <p class="note">Counts only what you typed in. Your tachograph is the record that matters — this is a rough running tally, not a compliance tool. Working time comes only from the driving and other-work figures you type on the day, not from your clock times — those include breaks.</p>
   </section>
 
   <section id="tab-pay" class="hidden">
@@ -462,6 +470,24 @@ function load(){
     mem = raw ? JSON.parse(raw) : {days:{},weeks:{},settings:{}};
   }catch(e){ mem={days:{},weeks:{},settings:{}}; memOnly=true; }
   mem.days=mem.days||{}; mem.weeks=mem.weeks||{}; mem.settings=mem.settings||{};
+  /* the driving figure used to be decimal hours off a slider (0-11, quarter
+     steps). it is HHMM now. anything with a dot, or 1-2 digits, is the old
+     shape — 8.25 becomes 0815, 9 becomes 0900. */
+  if(!mem.settings.durMigrated){
+    Object.values(mem.days).forEach(r=>{
+      if(r && r.drive!==undefined && r.drive!==null && r.drive!==""){
+        const t=String(r.drive);
+        if(/\./.test(t) || t.length<=2){
+          const h=Number(t);
+          if(isFinite(h)&&h>=0&&h<=24){
+            const mins=Math.round(h*60);
+            r.drive=String(Math.floor(mins/60)).padStart(2,"0")+String(mins%60).padStart(2,"0");
+          }
+        }
+      }
+    });
+    mem.settings.durMigrated=1;
+  }
   return mem;
 }
 function save(){
@@ -563,13 +589,32 @@ function weeklyRestOf(k){
   return best;
 }
 
-/* ============ driving ============ */
+/* ============ driving and working time ============ */
+/* durations are typed as HHMM, straight off the tacho */
+function durMins(v){
+  if(v===undefined||v===null||v==="") return null;
+  const t=String(v).trim();
+  if(!/^\d{1,4}$/.test(t)) return null;
+  const p=t.padStart(4,"0"), h=Number(p.slice(0,2)), m=Number(p.slice(2));
+  if(m>59) return null;
+  return h*60+m;
+}
+const durText = m => m===null ? "" : String(Math.floor(m/60)).padStart(2,"0")+String(m%60).padStart(2,"0");
+
 function driveInfo(ds,r){
   const worked=duration(r.start,r.end);
-  const stored=num(r.drive);
-  if(stored!==null) return {mins:Math.round(stored*60), assumed:false, worked};
+  const stored=durMins(r.drive);
+  if(stored!==null) return {mins:stored, assumed:false, worked};
   if(worked>0) return {mins:Math.min(540,worked), assumed:true, worked};
   return {mins:0, assumed:false, worked};
+}
+/* WTD working time = driving + other work. POA and breaks are excluded.
+   A day only counts once BOTH have been typed in — a half-filled day
+   would understate the week, and understating is the dangerous direction. */
+function wtdInfo(ds,r){
+  const dr=durMins(r.drive), ow=durMins(r.other);
+  if(dr===null||ow===null) return {mins:0, logged:false};
+  return {mins:dr+ow, logged:true};
 }
 
 /* ============ the week's maths ============ */
@@ -580,6 +625,7 @@ function calc(monKey, skip){
   let weekdayMins=0, satMins=0, sunMins=0, bhWorkedPaid=0, bhWorkedMins=0;
   let nights=0, bhDays=0, holDays=0, workedMins=0, driveMins=0, extDrive=0;
   let redRest=0, shortRest=0, assumedDrive=0;
+  let wtdMins=0, wtdDays=0, wtdMissing=0;
   const attMissed=[], attPending=[];
   const todayIso=iso(new Date());
 
@@ -612,6 +658,9 @@ function calc(monKey, skip){
     driveMins+=dv.mins;
     if(dv.assumed && dv.mins>0) assumedDrive++;
     if(dv.mins>540) extDrive++;
+    const wi=wtdInfo(ds,r);
+    if(wi.logged){ wtdMins+=wi.mins; wtdDays++; }
+    else if(mins>0) wtdMissing++;
 
     const k=restKind(restBefore(ds));
     if(k==="reduced") redRest++;
@@ -672,6 +721,7 @@ function calc(monKey, skip){
     basicMins, basicWorked, holBasic, otMins, satPaid, sunPaid,
     beforePension, pension, cash, taxable, tax, ni, net,
     driveMins, extDrive, redRest, shortRest, assumedDrive,
+    wtdMins, wtdDays, wtdMissing,
     attEarned, attMissed, attPending, attPay,
     hasData: workedMins>0 || bhDays>0 || holDays>0 || nights>0 || ssp>0
   };
@@ -855,9 +905,9 @@ function renderDay(c){
   const i=dowIndex(curDay), isBH=BH.has(curDay)&&i<5;
   const worked=duration(r.start,r.end);
   const dv=driveInfo(curDay,r);
+  const wi=wtdInfo(curDay,r);
   const rb=restBefore(curDay), kind=restKind(rb);
   const rt=REST_TEXT[kind];
-  const slide=dv.mins?dec(dv.mins):9;
   /* holiday can only be booked on a weekday that is not already a bank holiday */
   const canHol = dowIndex(curDay)<5 && !BH.has(curDay);
 
@@ -920,11 +970,18 @@ function renderDay(c){
       <div class="note">${rt[2]}</div>
     </div>
 
-    <div class="sl">
-      <div class="row"><span class="nm">Driving</span>
-        <span class="vv ${dv.assumed||!dv.mins?"guess":""}" id="dvVal">${slide.toFixed(2).replace(/\.?0+$/,"")} h${dv.assumed?" assumed":dv.mins?"":" assumed"}</span></div>
-      <input type="range" id="dvRange" min="0" max="11" step="0.25" value="${slide}">
-      <div class="ticks"><span>0</span><span>3</span><span>6</span><span>9</span><span>11</span></div>
+    <div class="durs">
+      <div class="dur"><label>Driving</label>
+        <input class="dv" inputmode="numeric" maxlength="4" placeholder="0000" value="${durText(durMins(r.drive))}" aria-label="Driving"></div>
+      <div class="dur"><label>Other work</label>
+        <input class="ow" inputmode="numeric" maxlength="4" placeholder="0000" value="${durText(durMins(r.other))}" aria-label="Other work"></div>
+      <div class="dur"><label>POA</label>
+        <input class="po" inputmode="numeric" maxlength="4" placeholder="0000" value="${durText(durMins(r.poa))}" aria-label="Period of availability"></div>
+      <div class="wt"><span class="nm">Working time</span>
+        <span class="vv ${wi.logged?"":"guess"}">${wi.logged?hm(wi.mins):"not logged"}</span></div>
+      <p class="note">${wi.logged
+        ? "Driving plus other work. POA and breaks are left out, as they should be."
+        : "Straight off the tacho, in hours and minutes — 0837 is 8h 37. Both driving and other work are needed before the week counts it."}</p>
     </div>
 
     <div class="field">
@@ -957,9 +1014,17 @@ function renderDay(c){
   const holBtn=box.querySelector(".hol");
   if(holBtn) holBtn.addEventListener("click",()=>set("hol",r.hol?"":true));
 
-  const rng=box.querySelector("#dvRange"), val=box.querySelector("#dvVal");
-  rng.addEventListener("input",e=>{ val.textContent=Number(e.target.value).toFixed(2).replace(/\.?0+$/,"")+" h"; val.className="vv"; });
-  rng.addEventListener("change",e=>set("drive",e.target.value));
+  [["dv","drive"],["ow","other"],["po","poa"]].forEach(([cls,key])=>{
+    const el=box.querySelector("."+cls);
+    if(!el) return;
+    el.addEventListener("change",e=>{
+      const t=e.target.value.trim();
+      if(t===""){ set(key,""); return; }
+      const m=durMins(t);
+      if(m===null){ e.target.value=durText(durMins(r[key])); return; }
+      set(key,durText(m));
+    });
+  });
   box.querySelector("#toWeek").addEventListener("click",()=>switchTab("week"));
 }
 
@@ -1059,7 +1124,7 @@ function renderHours(c){
   const prev=calc(addDays(cur(),-7));
   const fort=c.driveMins+prev.driveMins;
   const dh=[];
-  const asum=c.assumedDrive?" "+c.assumedDrive+" day"+(c.assumedDrive===1?"":"s")+" assumed at 9 hours — slide the driving figure on the day to correct it.":"";
+  const asum=c.assumedDrive?" "+c.assumedDrive+" day"+(c.assumedDrive===1?"":"s")+" assumed at 9 hours — type the real driving figure on the day to correct it.":"";
   dh.push(stat("Driving this week",dec(c.driveMins).toFixed(1)+" / 56 h",asum.trim(),c.driveMins/(56*60)));
   dh.push(stat("Driving this fortnight",dec(fort).toFixed(1)+" / 90 h","with week beginning "+shortDate(addDays(cur(),-7)),fort/(90*60)));
   dh.push(stat("10-hour driving days",c.extDrive+" / 2 used",(2-c.extDrive)>0?(2-c.extDrive)+" left this week":"none left — 9 hours max now",c.extDrive/2));
@@ -1094,12 +1159,22 @@ function renderHours(c){
   document.getElementById("dhRest").innerHTML=rest.join("");
 
   const wt=[];
-  wt.push(stat("Working time this week",dec(c.workedMins).toFixed(1)+" / 60 h","the hard ceiling for any single week",c.workedMins/(60*60)));
-  let tot=0,n=0;
-  for(let i=0;i<17;i++){ const cc=calc(addDays(cur(),-7*i)); if(cc.hasData){ tot+=cc.workedMins; n++; } }
-  const avg=n?dec(tot)/n:0;
-  wt.push(stat("Average week",avg.toFixed(1)+" / 48 h","over the last "+n+" week"+(n===1?"":"s")+" you logged",avg/48));
+  if(!c.wtdDays){
+    wt.push(`<div class="stat"><div class="top"><span class="name">Working time this week</span>
+      <span class="val">not logged</span></div>
+      <div class="note">Type the driving and other-work figures on each day and this fills in.</div></div>`);
+  }else{
+    const miss=c.wtdMissing?" "+c.wtdMissing+" worked day"+(c.wtdMissing===1?"":"s")+" still missing a figure, so the real total is higher.":"";
+    wt.push(stat("Working time this week",dec(c.wtdMins).toFixed(1)+" / 60 h",
+      c.wtdDays+" day"+(c.wtdDays===1?"":"s")+" logged."+miss, c.wtdMins/(60*60)));
+    let tot=0,n=0;
+    for(let i=0;i<17;i++){ const cc=calc(addDays(cur(),-7*i)); if(cc.wtdDays){ tot+=cc.wtdMins; n++; } }
+    const avg=n?dec(tot)/n:0;
+    wt.push(stat("Average week",avg.toFixed(1)+" / 48 h",
+      "over the "+n+" week"+(n===1?"":"s")+" you logged working time for",avg/48));
+  }
   document.getElementById("dhWtd").innerHTML=wt.join("");
+
 }
 
 /* ============ payslip, line by line ============ */
