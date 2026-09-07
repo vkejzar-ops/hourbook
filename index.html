@@ -73,8 +73,23 @@ header{
 }
 .hero .fig small{font-size:26px;font-weight:400}
 .hero .sub{color:var(--dim);font-size:13.5px;margin-top:7px}
-.hero .strip{display:flex;gap:18px;margin-top:12px;font-size:13.5px}
-.hero .strip span{color:var(--dim)}
+.hero .strip{display:flex;gap:12px;margin-top:16px;padding-top:14px;border-top:1px solid var(--rule)}
+.hero .strip:empty{display:none}
+.hero .strip .s{flex:1 1 0;min-width:0}
+.hero .strip .s:nth-child(2){text-align:center}
+.hero .strip .s:last-child:not(:first-child){text-align:right}
+.hero .strip .v{display:block;font-size:21px;line-height:1;color:var(--amber);letter-spacing:-.01em}
+.hero .strip .v small{font-size:14px}
+.hero .strip .k{display:block;font-size:12.5px;color:var(--dim);margin-top:6px}
+.nval{display:flex;align-items:baseline;gap:8px;margin:6px 0 2px}
+.nval .pv{font-size:26px;line-height:1;color:var(--amber)}
+.nval .k{font-size:12.5px;color:var(--dim)}
+.hero .fig.two{display:flex;align-items:flex-start;gap:12px}
+.hero .fig.two .f{flex:1 1 0;min-width:0}
+.hero .fig.two .f.r{text-align:right}
+.hero .fig.two .n{font-size:36px;line-height:1;display:block}
+.hero .fig.two .n small{font-size:21px}
+.hero .fig.two .lbl{display:block;font-size:12.5px;color:var(--dim);margin-top:7px;letter-spacing:0}
 .hero .strip b{font-weight:600;color:var(--text)}
 
 main{padding:0 16px 30px}
@@ -101,6 +116,13 @@ main{padding:0 16px 30px}
 }
 .chip.on{background:var(--amber);border-color:var(--amber);color:#FFF;font-weight:600}
 .chip.wide{margin-left:auto}
+.chip:disabled{opacity:1;color:var(--rule);background:var(--ground);border-style:dashed}
+.pair{display:flex;gap:10px;padding:11px 0;border-bottom:1px solid var(--rule)}
+.pair .pf{flex:1 1 0;min-width:0}
+.pair .pf .lb{display:block;font-size:14.5px;margin-bottom:7px}
+.pair .pf .chip{display:block;width:100%;text-align:center}
+.pair .pf .hint{display:block;font-size:12.5px;color:var(--dim);margin-top:6px}
+.pair .pf.off .lb,.pair .pf.off .hint{color:var(--rule)}
 .bhtag{font-size:13px;color:var(--amber);margin-top:8px}
 .extra{display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap}
 .extra label{font-size:13px;color:var(--dim)}
@@ -297,7 +319,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
 </header>
 
 <div class="hero">
-  <p class="fig" id="heroFig">£0<small>.00</small></p>
+  <div class="fig" id="heroFig">£0<small>.00</small></div>
   <div class="sub" id="heroSub">—</div>
   <div class="strip" id="heroStrip"></div>
 </div>
@@ -575,6 +597,8 @@ const dec = m => m/60;
 const money = n => "£"+Number(n||0).toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2});
 const n2 = n => Number(n||0).toFixed(2);
 const r2 = n => Math.round(n*100)/100;
+const money2 = n => { const p=Number(n||0).toFixed(2).split(".");
+  return "\u00a3"+(+p[0]).toLocaleString("en-GB")+"<small>."+p[1]+"</small>"; };
 const num = v => (v===undefined||v===null||v==="") ? null : Number(v);
 
 /* ============ rest, worked out from the clock ============ */
@@ -910,47 +934,53 @@ function render(){
   N.style.opacity = N.disabled ? ".35" : "1";
 
   const fig=document.getElementById("heroFig"), sub=document.getElementById("heroSub"), strip=document.getElementById("heroStrip");
+  fig.className="fig"; sub.style.display="";
   if(tab==="day"){
     const r=load().days[curDay]||{}, mins=duration(r.start,r.end);
-    const isBH=BH.has(curDay)&&dowIndex(curDay)<5&&mins===0;
-    const isHol=!isBH&&!!r.hol&&dowIndex(curDay)<5&&mins===0;
-    heroNet(fig,sub,c);
-    /* what the day itself is worth. with nothing logged this is left blank
-       rather than shown as a loss — an empty day cannot take pay away. */
-    const dayLogged = mins>0 || isBH || isHol || !!r.night;
-    const add = dayLogged ? c.beforePension-calc(cur(),curDay).beforePension : null;
-    const dayFig = isBH ? S("bhHours")+"h bank hol"
-                 : isHol ? S("holHours")+"h holiday"
-                 : mins ? hm(mins) : "—";
-    strip.innerHTML=
-      "<span>this day <b>"+dayFig+"</b></span>"+
-      "<span>adds <b>"+(add===null?"—":money(add))+"</b></span>";
+    /* today's own gross on the left, the week's take-home so far on the right.
+       an empty day or an empty week shows a dash rather than a figure. */
+    const dayGross = c.hasData ? c.beforePension-calc(cur(),curDay).beforePension : null;
+    const dayLogged = mins>0 || (BH.has(curDay)&&dowIndex(curDay)<5) || !!r.hol || !!r.night;
+    fig.className="fig two";
+    fig.innerHTML=
+      "<span class=\"f\"><span class=\"n\">"+(dayLogged&&dayGross!==null?money2(dayGross):"\u2014")+"</span>"+
+        "<span class=\"lbl\">today before tax</span></span>"+
+      "<span class=\"f r\"><span class=\"n\">"+(c.hasData?money2(c.net):"\u2014")+"</span>"+
+        "<span class=\"lbl\">week after tax</span></span>";
+    sub.textContent = c.hasData ? "" : "nothing logged this week yet";
+    sub.style.display = sub.textContent ? "" : "none";
+    strip.innerHTML="";
   }else if(tab==="pay"){
     const pc=calc(plCur()), t=plTotals(plCur(),pc);
     const gap=t.slipPay-t.expPay, gh=t.slipH-t.expH;
-    const p=t.expPay.toFixed(2).split(".");
-    fig.innerHTML="£"+(+p[0]).toLocaleString("en-GB")+"<small>."+p[1]+"</small>";
-    sub.textContent = !plHasAny(plCur()) ? "expected before tax"
-      : Math.abs(gap)<0.01 ? "expected before tax · slip matches"
+    fig.className="fig two";
+    fig.innerHTML=
+      "<span class=\"f\"><span class=\"n\">"+money2(t.expPay)+"</span>"+
+        "<span class=\"lbl\">expected before tax</span></span>"+
+      "<span class=\"f r\"><span class=\"n\">"+money2(pc.net)+"</span>"+
+        "<span class=\"lbl\">expected after tax</span></span>";
+    sub.textContent = !plHasAny(plCur()) ? ""
+      : Math.abs(gap)<0.01 ? "the slip matches"
       : "£"+Math.abs(gap).toFixed(2)+" "+(gap<0?"short":"over")+" on the slip";
+    sub.style.display = sub.textContent ? "" : "none";
     strip.innerHTML=
-      "<span>logged <b>"+n2(t.expH)+"h</b></span>"+
-      "<span>slip <b>"+n2(t.slipH)+"h</b></span>"+
-      "<span>gap <b>"+(Math.abs(gh)<0.005?"none":(gh>0?"+":"−")+n2(Math.abs(gh))+"h")+"</b></span>";
+      "<span class=\"s\"><span class=\"v\">"+n2(t.expH)+"h"+"</span><span class=\"k\">logged</span></span>"+
+      "<span class=\"s\"><span class=\"v\">"+n2(t.slipH)+"h"+"</span><span class=\"k\">on the slip</span></span>"+
+      "<span class=\"s\"><span class=\"v\">"+(Math.abs(gh)<0.005?"none":(gh>0?"+":"\u2212")+n2(Math.abs(gh))+"h")+"</span><span class=\"k\">gap</span></span>";
   }else if(tab==="history"){
     const hs=histSummary();
     fig.innerHTML=hs.weeks+"<small> "+(hs.weeks===1?"week":"weeks")+"</small>";
     sub.textContent="logged so far";
     strip.innerHTML=
-      "<span>hours <b>"+n2(hs.hours)+"</b></span>"+
-      "<span>checked <b>"+hs.checked+"</b></span>"+
-      "<span>off <b>"+hs.off+"</b></span>";
+      "<span class=\"s\"><span class=\"v\">"+n2(hs.hours)+"h"+"</span><span class=\"k\">hours</span></span>"+
+      "<span class=\"s\"><span class=\"v\">"+hs.checked+"</span><span class=\"k\">checked</span></span>"+
+      "<span class=\"s\"><span class=\"v\">"+hs.off+"</span><span class=\"k\">days off</span></span>";
   }else{
     heroNet(fig,sub,c);
     strip.innerHTML=
-      "<span>worked <b>"+hm(c.workedMins)+"</b></span>"+
-      "<span>paid <b>"+hm(c.paidMins)+"</b></span>"+
-      "<span>gross <b>"+money(c.cash)+"</b></span>";
+      "<span class=\"s\"><span class=\"v\">"+hm(c.workedMins)+"</span><span class=\"k\">worked</span></span>"+
+      "<span class=\"s\"><span class=\"v\">"+hm(c.paidMins)+"</span><span class=\"k\">paid</span></span>"+
+      "<span class=\"s\"><span class=\"v\">"+money2(c.cash)+"</span><span class=\"k\">gross</span></span>";
   }
 
   if(tab==="day")     renderDay(c);
@@ -1045,14 +1075,18 @@ function renderDay(c){
         : "Off the tacho, in hours and minutes \u2014 0837 is 8h 37. Both are needed before the week counts the day."}</p>
     </div>
 
-    <div class="field">
-      <label>Night out<span class="hint">pays £${n2(S("nightOut")+S("meal"))} with the meal</span></label>
-      <button class="chip nt${r.night?" on":""}">${r.night?"yes":"no"}</button>
+    <div class="pair">
+      <div class="pf">
+        <span class="lb">Night out</span>
+        <button class="chip nt${r.night?" on":""}">${r.night?"yes":"no"}</button>
+        <span class="hint">pays £${n2(S("nightOut")+S("meal"))} with the meal</span>
+      </div>
+      ${canHol?`<div class="pf${worked?" off":""}">
+        <span class="lb">Holiday</span>
+        <button class="chip hol${r.hol?" on":""}"${worked?" disabled":""}>${worked?"—":r.hol?"booked":"no"}</button>
+        <span class="hint">${worked?"clear the times to book it off":"pays "+S("holHours")+" hours towards the 50"}</span>
+      </div>`:""}
     </div>
-    ${canHol?`<div class="field">
-      <label>Holiday<span class="hint">${worked?"clear the times to book it off":"pays "+S("holHours")+" hours towards the 50"}</span></label>
-      <button class="chip hol${r.hol?" on":""}"${worked?" disabled":""}>${r.hol?"booked":"no"}</button>
-    </div>`:""}
 
     <div class="cards">
       <div><b>${worked?hm(worked):"—"}</b><span>on the clock</span></div>
@@ -1255,12 +1289,12 @@ function renderPayslip(c){
       const g = raw===null ? null : raw-exp.units;
       row.innerHTML=`
         <div class="top"><span class="nm">${label}</span><span class="exp">expected ${exp.units} · ${money(exp.cash)}</span></div>
+        <div class="nval"><span class="pv">${v}</span><span class="k">on the slip</span></div>
         <input type="range" class="pr" min="0" max="6" step="1" value="${v}">
-        <div class="ticks"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span></div>
-        <div class="sub"><b class="pv">${v} on the slip</b>${
-          g===null ? " · not entered yet"
-          : g===0  ? " · matches"
-          : " · "+(g>0?"+":"−")+Math.abs(g)+" · "+(g>0?"+":"−")+money(Math.abs(g)*(S("nightOut")+S("meal")))}</div>`;
+        <div class="sub">${
+          g===null ? "not entered yet"
+          : g===0  ? "matches"
+          : (g>0?"+":"−")+Math.abs(g)+" · "+(g>0?"+":"−")+money(Math.abs(g)*(S("nightOut")+S("meal")))}</div>`;
 
     }else if(unit==="yn"){
       const paid = raw===null ? exp.units===1 : raw===1;
@@ -1315,7 +1349,7 @@ function renderPayslip(c){
     const rng=row.querySelector(".pr");
     if(rng){
       const pv=row.querySelector(".pv");
-      rng.addEventListener("input",ev=>{ pv.textContent=ev.target.value+" on the slip"; });
+      rng.addEventListener("input",ev=>{ pv.textContent=ev.target.value; });
       rng.addEventListener("change",ev=>commit(ev.target.value));
     }
     const yn=row.querySelector(".ynb");
