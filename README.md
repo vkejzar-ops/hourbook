@@ -24,11 +24,11 @@ This file exists so a future conversation can pick the project up cold.
 
 ## Version discipline
 
-`const BUILD="v22"` in `index.html` and `const CACHE = "hourbook-v22"` in `sw.js`
+`const BUILD="v23"` in `index.html` and `const CACHE = "hourbook-v23"` in `sw.js`
 **must be bumped together on every change.** The test `build.js` fails if they
 drift. The build number is shown in More → Everything else.
 
-Current version: **v22**.
+Current version: **v23**.
 
 ---
 
@@ -106,7 +106,7 @@ August slip, £700 basic + £50 attendance giving £29.00, which is 5% of £580 
 
 **NI** is 8% between £242 and £967, then 2% above £967.
 
-**Tax** — see the v22 section below; it is now cumulative and matches all five
+**Tax** — see the v23 section below; it is now cumulative and matches all five
 slips within 14p. Niable pay is payments minus meal, night out and expenses.
 Taxable is niable plus the Medicash BIK. Pension shows as a negative line inside
 Payments.
@@ -310,7 +310,7 @@ the strips explain where it came from.
 
 `doBackup()` is `JSON.stringify(load())` — the whole store verbatim. There is no
 field list to forget, so nothing can be missed. Proven by `bkp2.js`, and
-re-proven for the v22 settings by `bkp3.js` (43 checks), which drives a full
+re-proven for the v23 settings by `bkp3.js` (43 checks), which drives a full
 round trip through the real file input rather than asserting from the source.
 
 `bkp3.js` confirms the file carries the tax code, student loan plan, Medicash
@@ -343,7 +343,7 @@ afterwards.
 
 Two things to keep in mind when building one:
 
-- **The app must already understand the settings.** Push a file with v22
+- **The app must already understand the settings.** Push a file with v23
   settings onto a v21 build and they sit in storage doing nothing. Upload
   `index.html` and `sw.js` first, import second.
 - **The named day is replaced whole.** A file giving only `start` will drop an
@@ -365,7 +365,7 @@ finish-time handler; the gov.uk fetch does not.
 
 ## Tests
 
-37 suites in `/home/claude/t/`, 830 checks, all green as of v22. Run with
+42 suites in `/home/claude/t/`, 974 checks, all green as of v23. Run with
 `node <file>.js`. (`dom.js` is the bootstrap and prints no count of its own.)
 
 `test.js` · `hol.js` · `new2.js` · `holui.js` · `dom.js` · `hdr.js` · `imp.js` ·
@@ -373,7 +373,7 @@ finish-time handler; the gov.uk fetch does not.
 `dur.js` · `mig.js` · `pay2.js` · `ui3.js` · `ui4.js` · `gap.js` · `build.js` ·
 `att.js` · `attday.js` · `lock.js` · `bkp2.js` · `carry.js` · `carryui.js` ·
 `sick.js` · `window.js` · `exp.js` · `exp2.js` · `fold.js` · `tax.js` ·
-`ytd.js` · `slips.js` · `ui5.js` · `bkp3.js` · `imp2.js`
+`ytd.js` · `slips.js` · `ui5.js` · `bkp3.js` · `imp2.js` · `roll.js` · `intro.js` · `hero.js` · `ahead.js` · `tick.js`
 
 Other `.js` files in that directory are scratch and can be ignored.
 
@@ -408,7 +408,7 @@ Other `.js` files in that directory are scratch and can be ignored.
 - **`renderSetup()` rebuilds the rows every time.** Re-query the element after
   any click that calls `render()`, or you hold a detached node.
 
-**A patching lesson from v22, worth not repeating.** Two `str.index()` bounds
+**A patching lesson from v23, worth not repeating.** Two `str.index()` bounds
 were used to replace a block, and the second range silently swallowed
 `plLocked`, `lastPaidWeek` and `paydayLabel`, which sat between the two markers.
 The tests caught it. After any large structural patch, run:
@@ -638,7 +638,110 @@ already dismissed. Covered by `exp2.js`.
 
 ---
 
-## Tax codes, student loans and the estimate marker (v22)
+## What v23 changed
+
+Three fixes and one addition, all with suites pinning them.
+
+### The year-to-date figure now expires with its tax year
+
+`ytdStale(k)` compares the tax year of the handover **paydate** against the tax
+year of week `k`'s **payday** — paydate on both sides, because that is how HMRC
+assigns a slip to a year. When they differ, `cumBasis` ignores the typed figure
+and falls back to counting logged weeks.
+
+Before this, last year's total stayed in the base forever. It did not produce
+runaway tax, because the cumulative method subtracts what earlier weeks already
+carried; what it did was shove every week up a band. On a test week in June
+2027: v22 charged £117.01, v23 charges £131.01 — v22 was applying a 40% marginal
+rate to a base that should have been under the threshold.
+
+Ignored, never deleted. The config row keeps showing the figure, flagged, so it
+can be replaced off the first slip of the new year. `roll.js`, 23 checks.
+
+### A prompt each April
+
+`taxYearCheck()` fires on the first launch on or after 6 April and lists three
+things: the tax code, the year-to-date figure, and the fact that `TAX_BANDS` and
+`SL_PLANS` are hardcoded for one tax year and are stale until the file itself is
+replaced. On a first run it records where the year stands and says nothing, so
+upgrading mid-year does not trigger it.
+
+There is no way to avoid this. Every API on HMRC's developer hub is a personal
+record behind OAuth; the rates themselves are published on GOV.UK as prose, not
+data. Scraping would break on the next redesign. Once a year, a human checks.
+
+### A first-run notice
+
+`introCheck()` shows a panel on a fresh install saying every figure is an
+estimate and nothing is connected to payroll, then the four things that make it
+closer, in order of value: the year-to-date box, the tax code, the rates, and
+the payslip tab.
+
+Gated on `INTRO_REV`, **not** on `BUILD`. Bumping it on every version would nag
+people who have already read it. Raise it by hand and only when the wording
+changes. `intro.js`, 16 checks.
+
+### The hero caption alignment
+
+`.hero .fig.one + .sub` was an adjacent sibling selector. When the estimate
+marker was added between the figure and its caption the rule silently stopped
+matching, so on the week, hours and history tabs the figure and marker were
+centred while the caption sat hard left. A hidden element still counts as a
+sibling, which is why history was affected too even with the marker switched
+off.
+
+Now `~` instead of `+`. Also `.estb` centres itself with auto margins, which put
+it out of line in the strip's edge-aligned columns; those are pinned to their
+column's edge now.
+
+`hero.js` (26 checks) asserts the computed `text-align` on every hero rather
+than the CSS text, and explicitly checks that the adjacent selector would
+**not** have matched — so this cannot regress quietly. `ui3.js` was asserting
+the broken selector and has been corrected.
+
+### Nothing is priced before it happens
+
+The day and week tabs used to run forward without limit, and because bank
+holidays are seeded years ahead, any future week holding one already showed ten
+hours paid. Two changes:
+
+`navLimit()` stops the day and week arrows at the end of next week. The payslip
+tab keeps its own, tighter limit at the last real payday.
+
+`calc()` now counts a bank holiday or a booked holiday only once the day itself
+has arrived — midnight on the day, not before. Future ones are counted into
+`bhPending` and `holPending` instead, and the week ledger says "not counted yet"
+with the hours greyed rather than going silent. `ahead.js`, 34 checks.
+
+A regression this caught, worth remembering: `sick.js` searched **forward** for a
+real bank holiday to build its fixture, so it started landing on a pending one.
+Fixtures that need a bank holiday must search backwards.
+
+### Ticking off a payslip line that matches
+
+Every row that takes a figure has a marker in front of the box. Faint and dashed
+while it is only an offer; tap it and the expected figure is stored, exactly as
+if it had been typed. Tap the green one to clear the row. Type something that
+disagrees and it becomes a red cross and stops being a button — the gap column
+already says by how much, so there is nothing left for a tap to do.
+
+It stores the figure rather than a flag. That matters: if a day is corrected
+later, the row shows the new gap instead of still claiming to match.
+
+Nights keeps its tick under the slider, because the slider needs the width, but
+follows the same rule — green on the expected number, red cross and "does not
+match" once it is moved off. Attendance keeps its yes/no button and gains the
+marker in front.
+
+`#plAll` fills every row still empty in one tap and skips any figure typed by
+hand, so it can never overwrite something entered deliberately. It is dead on a
+week that has not been paid.
+
+There are no tax or NI rows on this tab — both are display-only — so the
+question of offering a tick on an estimated figure does not arise.
+`tick.js`, 45 checks.
+
+## Tax codes, student loans and the estimate marker (v22 design, still current)
 
 ### The tax code
 

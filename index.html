@@ -93,7 +93,15 @@ header{
 .hero .strip .estb{margin:6px auto 0;font-size:9.5px;padding:2px 5px}
 .field .mci[disabled]{opacity:.4}
 .field .chip.on{border-color:var(--amber);color:var(--amber)}
-.hero .fig.one + .sub{text-align:center}
+/* general sibling, NOT adjacent: the estimate bubble sits between the figure
+   and its caption, and an adjacent selector here silently stops matching the
+   moment anything is put in that gap — which is exactly what happened. */
+.hero .fig.one ~ .sub{text-align:center}
+/* the marker centres itself with auto margins, so in a column whose text is
+   pushed to an edge it ends up out of line with the figure above it. pin it to
+   the same edge as the column it lives in. */
+.hero .strip .s:first-child .estb{margin-left:0}
+.hero .strip .s:last-child:not(:first-child) .estb{margin-right:0}
 .hero .fig.two{display:flex;align-items:flex-start;gap:12px}
 .hero .fig.two .f{flex:1 1 0;min-width:0;text-align:center}
 .hero .fig.two .f.r{text-align:center}
@@ -388,12 +396,44 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
 
 /* ---- nights confirmation tick ---- */
 .ck{display:flex;align-items:center;gap:9px;margin-top:2px}
+/* the tick that sits in front of a payslip box. faint and dashed while it is
+   only an offer, solid green once used, and a red cross once a typed figure
+   disagrees — at which point it is a marker, not a button. */
+.pl .tk{width:34px;height:42px;flex:none;border:1px dashed var(--rule);border-radius:9px;
+  background:transparent;color:var(--dim);font-size:15px;line-height:1;opacity:.75}
+.pl .tk.on{background:var(--green);border-style:solid;border-color:var(--green);
+  color:#FFF;opacity:1}
+.pl .tk.no{background:var(--red);border-style:solid;border-color:var(--red);
+  color:#FFF;opacity:1;pointer-events:none}
+.prov .pl .tk{pointer-events:none;opacity:.4}
+#plAll{width:100%;height:44px;border:1px solid var(--rule);border-radius:10px;
+  background:var(--ground);font-size:14px;color:var(--text);margin-top:14px}
+#plAll:disabled{opacity:.4}
 .ckb{width:26px;height:26px;flex:none;border:1px solid var(--rule);border-radius:7px;
   background:var(--ground);color:var(--rule);font-size:15px;line-height:1}
 .ckb.on{background:var(--green);border-color:var(--green);color:#FFF}
+.ckb.bad{background:var(--red);border-color:var(--red);color:#FFF}
+.ck.bad .ckl{color:var(--red)}
 .ckl{font-size:12.5px;color:var(--dim)}
 .ck.on .ckl{color:var(--green)}
 @media (prefers-reduced-motion:no-preference){.btn,.chip{transition:background .12s}}
+/* ---- the first-run notice ---- */
+#intro{position:fixed;inset:0;z-index:60;background:rgba(20,17,12,.55);
+  display:flex;align-items:flex-end;justify-content:center;padding:0}
+#intro.hidden{display:none}
+#intro .box{background:var(--panel);width:100%;max-width:520px;
+  border-radius:16px 16px 0 0;padding:22px 18px calc(18px + env(safe-area-inset-bottom));
+  max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#intro h3{font-size:19px;font-weight:600;margin:0 0 10px}
+#intro p{font-size:14px;line-height:1.55;margin:0 0 12px}
+#intro .lead{color:var(--dim)}
+#intro ul{margin:0 0 14px;padding-left:0;list-style:none}
+#intro li{font-size:14px;line-height:1.5;margin-bottom:11px;
+  padding-left:13px;border-left:2px solid var(--rule)}
+#intro li b{font-weight:600}
+#intro .warn{font-size:13px;line-height:1.5;color:var(--amber);margin:0 0 16px}
+#intro button{width:100%;padding:13px;border:0;border-radius:10px;
+  background:var(--amber);color:#fff;font-size:15.5px;font-weight:600}
 </style>
 </head>
 <body>
@@ -415,6 +455,31 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
   <div class="sub" id="heroSub">—</div>
   <div class="strip" id="heroStrip"></div>
 </div>
+
+<div id="intro" class="hidden"><div class="box">
+  <h3>Every figure here is an estimate</h3>
+  <p class="lead">Nothing in this app is connected to payroll or to HMRC. It
+    works entirely off what you type into it, so it can only be as right as
+    what it has been told.</p>
+  <p>Four things make it closer, in the order they are worth doing:</p>
+  <ul>
+    <li><b>Setup &rarr; Pay so far this tax year.</b> The biggest one by far.
+      Take the year-to-date boxes off your latest payslip, or off a P45.
+      Without it the app guesses your tax from the weeks it can see, and early
+      on that is not many.</li>
+    <li><b>Setup &rarr; your tax code</b>, off a real payslip. It assumes the
+      standard code until you tell it otherwise, and it cannot check the one
+      you type.</li>
+    <li><b>Setup &rarr; rates, student loan, Medicash, pension.</b> They are
+      all editable because not everyone is on the same ones.</li>
+    <li><b>The Payslip tab</b>, once a slip actually lands. Put the real
+      numbers in and it will tell you where it differs.</li>
+  </ul>
+  <p class="warn">This is not payroll and it is not tax advice. Your payslip is
+    the real answer. If the two disagree, it is worth asking payroll &mdash; but
+    check here first, because the app may simply not know something yet.</p>
+  <button id="introOk">Got it</button>
+</div></div>
 
 <main>
 
@@ -452,6 +517,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
     <h2>Totals</h2>
     <div class="ledger" id="plTot"></div>
     <p class="note" id="plNote"></p>
+    <button class="btn" id="plAll">&#10003; Everything matches — fill the slip in</button>
     <button class="btn" id="plClear">Clear this week's payslip</button>
   </section>
 
@@ -623,7 +689,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v22";
+const BUILD="v23";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -951,6 +1017,7 @@ function calc(monKey, skip){
   const wk=d.weeks[monKey]||{};
   let weekdayMins=0, satMins=0, sunMins=0, bhWorkedPaid=0, bhWorkedMins=0;
   let nights=0, bhDays=0, holDays=0, sickDays=0, workedMins=0, driveMins=0, extDrive=0;
+  let bhPending=0, holPending=0;
   let expP=0; const expItems=[];
   let redRest=0, shortRest=0, assumedDrive=0;
   let wtdMins=0, wtdDays=0, wtdMissing=0;
@@ -982,11 +1049,15 @@ function calc(monKey, skip){
       if(ds>todayIso) attPending.push(ds); else attMissed.push(ds);
     }
 
+    /* a bank holiday or a booked holiday pays without anything being logged,
+       so it would otherwise show its money days before it happens. hold it
+       back until the day itself arrives — midnight on the day, not before.
+       the day view still shows it as coming, so nothing looks lost. */
     if(i<5 && BH.has(ds)){
-      if(mins===0) bhDays++;
+      if(mins===0){ if(ds>todayIso) bhPending++; else bhDays++; }
       else { bhWorkedMins+=mins; bhWorkedPaid+=Math.max(q(mins),S("sunMin")*60); }
     }
-    else if(onHol) holDays++;
+    else if(onHol){ if(ds>todayIso) holPending++; else holDays++; }
     else if(i<5) weekdayMins+=mins;
     else if(i===5) satMins+=mins;
     else sunMins+=mins;
@@ -1093,6 +1164,7 @@ function calc(monKey, skip){
   return {
     dates, lines:L, nights, bhDays, bhMins, bhWorkedMins, bhWorkedPaid,
     holDays, holMins, sickDays, ssp, sspPred, sickRate, expenses, expItems,
+    bhPending, holPending,
     workedMins, paidMins:basicMins+otMins+satPaid+sunPaid+bhWorkedPaid,
     basicMins, basicWorked, holBasic, otMins, satPaid, sunPaid,
     beforePension, pension, pensionable, cash, taxable, tax, ni, sloan, net,
@@ -1330,6 +1402,24 @@ function taxWeekOf(ds){
    weeks only need their TAXABLE figure, which does not depend on tax at all. */
 let ytdBusy=false;
 
+/* a handover figure belongs to ONE tax year and expires with it.
+
+   HMRC counts a slip into the tax year of its PAYDATE, so that is what decides
+   which year the typed figures belong to, and the same test is applied to the
+   week being priced. From 6 April the two stop matching and the old figure is
+   IGNORED — carried over it would tax every week of the new year as though the
+   whole of last year had been earned again, on one week of allowance.
+
+   Ignored, not deleted. Nothing the user typed is thrown away by the app: the
+   config row keeps showing it, flagged, so it can be replaced off the first
+   slip of the new year. Until it is, the estimate falls back to counting only
+   the weeks logged here, which is the same honest position as a new user. */
+function ytdStale(k){
+  const hand=SS("ytdFrom");
+  if(!hand) return false;
+  return taxYearStart(hand)!==taxYearStart(paydayOf(k));
+}
+
 /* the year-to-date basis for week k: how much taxable pay has been earned so
    far, and how many weeks of allowance go with it.
 
@@ -1349,7 +1439,7 @@ function cumBasis(k){
   const hand=SS("ytdFrom");
   let from, weeks, total=0;
 
-  if(hand){
+  if(hand && !ytdStale(k)){
     total = Number(d.settings.ytdTaxable)||0;
     /* the week AFTER the one that slip paid for */
     from  = addDays(weekPaidOn(hand),7);
@@ -1483,11 +1573,12 @@ function render(){
     U.textContent=paydayLabel(cur());
   }
 
-  /* arrows: none on history, and the payslip cannot run past the last payday */
+  /* arrows: none on history. forward stops at the last payday on the payslip
+     tab, and at the end of next week on the day and week tabs. */
   const P=document.getElementById("prev"), N=document.getElementById("next");
   P.style.visibility = tab==="history" ? "hidden" : "visible";
   N.style.visibility = tab==="history" ? "hidden" : "visible";
-  N.disabled = tab==="pay" && plCur()>=addDays(lastPaidWeek(),7);
+  N.disabled = navAtEnd();
   N.style.opacity = N.disabled ? ".35" : "1";
 
   const fig=document.getElementById("heroFig"), sub=document.getElementById("heroSub"), strip=document.getElementById("heroStrip");
@@ -1647,7 +1738,7 @@ function renderDay(c){
 
   box.innerHTML=`
     ${r.sick&&!worked?`<p class="note" style="margin-top:14px">Off sick. ${sickRate?"It pays £"+n2(sickRate)+" for the day.":"No daily rate is set, so nothing is predicted — type what the slip says on the week view."} It does <b>not</b> keep your attendance allowance.</p>`:""}
-    ${isBH?`<p class="note" style="margin-top:14px">Bank holiday. Leave it blank and it pays ${S("bhHours")} hours at the basic rate. Put times in and it pays at the Sunday rate instead, minimum ${S("sunMin")} hours.</p>`:""}
+    ${isBH?`<p class="note" style="margin-top:14px">Bank holiday. Leave it blank and it pays ${S("bhHours")} hours at the basic rate. Put times in and it pays at the Sunday rate instead, minimum ${S("sunMin")} hours.${curDay>iso(new Date())&&worked===0?` <b>Not in the week total yet</b> — it counts from ${shortDate(curDay)}.`:""}</p>`:""}
     ${r.hol&&!worked?`<p class="note" style="margin-top:14px">Booked as holiday. It pays ${S("holHours")} hours at the basic rate, counts towards the 50, and keeps your attendance allowance.</p>`:""}
     <div class="rest">
       <div class="top"><span class="nm">Rest before this shift</span>
@@ -1788,8 +1879,11 @@ function renderWeek(c){
     /* a day with no hours should always say why, rather than reading the
        same as one he simply forgot to fill in */
     let sub;
-    if(isBH&&mins===0) sub="Bank holiday · "+S("bhHours")+"h paid";
-    else if(isHol) sub="Holiday · "+S("holHours")+"h paid";
+    /* a bank holiday or holiday still ahead of us is real but not counted yet,
+       so say so rather than showing pay for a day that has not happened */
+    const notYet = ds>today && ((isBH&&mins===0) || isHol);
+    if(isBH&&mins===0) sub="Bank holiday · "+S("bhHours")+"h"+(notYet?" · not counted yet":" paid");
+    else if(isHol) sub="Holiday · "+S("holHours")+"h"+(notYet?" · not counted yet":" paid");
     else if(isSick) sub=c.sickRate?"Sick · £"+n2(c.sickRate)+" paid":"Sick · no rate set";
     else if(mins) sub=(r.start||"")+" – "+(r.end||"")+(isBH?" · bank holiday":"");
     else sub="not logged";
@@ -1800,7 +1894,7 @@ function renderWeek(c){
               + (ep?`<span class="pill ex">${penceText(ep)}</span>`:"");
     b.innerHTML=`<span class="nm"><b>${DAYNAME[i]} <span style="font-weight:400;color:var(--dim)">${shortDate(ds)}</span>${pills}</b>
       <span>${sub}</span></span>
-      <span class="hrs${mins||(isBH&&mins===0)||isHol?"":" zero"}">${mins?hm(mins):(isBH?hm(S("bhHours")*60):isHol?hm(S("holHours")*60):"—")}</span>
+      <span class="hrs${(mins||(isBH&&mins===0)||isHol)&&!notYet?"":" zero"}">${mins?hm(mins):(isBH?hm(S("bhHours")*60):isHol?hm(S("holHours")*60):"—")}</span>
       <span class="arw">›</span>`;
     b.addEventListener("click",()=>{ curDay=ds; switchTab("day"); window.scrollTo(0,0); });
     box.appendChild(b);
@@ -1984,8 +2078,9 @@ function renderPayslip(c){
         <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">expected ${exp.units}${owed?" +"+owed+" owed":""} · ${money(exp.cash)}</span></div>
         <div class="nval"><span class="pv">${v}</span><span class="k">on the slip</span></div>
         <input type="range" class="pr" min="0" max="12" step="1" value="${v}">
-        <div class="ck${seen?" on":""}"><button class="ckb${seen?" on":""}">&#10003;</button><span class="ckl">${
-          seen ? (raw===null ? "checked against the slip · matches" : "checked against the slip")
+        <div class="ck${seen?(g===0?" on":" bad"):""}"><button class="ckb${seen?(g===0?" on":" bad"):""}">${seen&&g!==0?"&#10007;":"&#10003;"}</button><span class="ckl">${
+          seen ? (g!==0 ? "checked against the slip · does not match"
+                        : (raw===null ? "checked against the slip · matches" : "checked against the slip"))
                : "tap when you have checked this against the slip"}</span></div>
         ${g===null||g===0?"":`<div class="sub">${(g>0?"+":"−")+Math.abs(g)+" · "+(g>0?"+":"−")+money(Math.abs(g)*(S("nightOut")+S("meal")))}</div>`}`;
 
@@ -1996,6 +2091,7 @@ function renderPayslip(c){
       row.innerHTML=`
         <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">expected ${exp.units?"yes":"no"}${owed?" +"+money(owed)+" owed":""} · ${money(exp.cash+(twice?S("attendance"):0))}</span></div>
         <div class="bot">
+          <button class="tk${raw===null?"":(g===0?" on":" no")}" data-tgt="${exp.units?1:0}">${raw!==null&&g!==0?"&#10007;":"&#10003;"}</button>
           <button class="chip ynb${paid?" on":""}">${paid?"on the slip":"not on the slip"}</button>
           <span class="gap" style="color:${g===null?"var(--dim)":g===0?"var(--green)":"var(--red)"}">${
             g===null?"—":g===0?"ok":(g>0?"+":"−")+money(S("attendance"))}</span>
@@ -2009,6 +2105,7 @@ function renderPayslip(c){
       row.innerHTML=`
         <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">logged ${n2(exp.units)} h${owed?" <i class=\"owetag\">+"+n2(owed)+" owed</i>":""}</span></div>
         <div class="bot">
+          <button class="tk${raw===null?"":(Math.abs(gapH)<0.005?" on":" no")}" data-tgt="${n2(tgt)}">${raw!==null&&Math.abs(gapH)>=0.005?"&#10007;":"&#10003;"}</button>
           <input class="pin" inputmode="decimal" placeholder="${n2(tgt)}" value="${shown}">
           <span class="unit">hours</span>
           <span class="gap" style="color:${gapH===null?"var(--dim)":Math.abs(gapH)<0.005?"var(--green)":"var(--red)"}">${
@@ -2026,6 +2123,7 @@ function renderPayslip(c){
       row.innerHTML=`
         <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">expected ${money(exp.cash)}${owed?" <i class=\"owetag\">+"+money(owed)+" owed</i>":""}</span></div>
         <div class="bot">
+          <button class="tk${raw===null?"":(Math.abs(gap)<0.005?" on":" no")}" data-tgt="${n2(tgtP)}">${raw!==null&&Math.abs(gap)>=0.005?"&#10007;":"&#10003;"}</button>
           <input class="pin" inputmode="decimal" placeholder="${n2(tgtP)}" value="${shown}">
           <span class="unit">£</span>
           <span class="gap" style="color:${gap===null?"var(--dim)":Math.abs(gap)<0.005?"var(--green)":"var(--red)"}">${
@@ -2118,6 +2216,14 @@ function renderPayslip(c){
     const inp=row.querySelector(".pin");
     if(inp && locked) inp.disabled=true;
     if(inp && !locked) inp.addEventListener("change",ev=>commit(ev.target.value.trim()));
+    /* the tick agrees with the row in one tap. it stores the figure rather than
+       just a flag, so if a day is corrected later the row shows the gap instead
+       of still claiming to match. tapping a green one clears the row again; a
+       red cross is only a marker, and the gap column already says by how much. */
+    const tk=row.querySelector(".tk");
+    if(tk && !locked && !tk.classList.contains("no")){
+      tk.addEventListener("click",()=>commit(tk.classList.contains("on")?"":tk.dataset.tgt));
+    }
     const rng=row.querySelector(".pr");
     if(rng && locked) rng.disabled=true;
     if(rng && !locked){
@@ -2201,6 +2307,18 @@ function renderPayslip(c){
     }
   });
   worst.sort((a,b)=>Math.abs(b.gp)-Math.abs(a.gp));
+
+  /* "everything matches" fills only the rows still empty, so it can never
+     overwrite a figure typed by hand. the nights row is a slider rather than
+     a box, so it is confirmed through its own tick instead. */
+  const ab=document.getElementById("plAll");
+  const empties=PL_LINES.filter(([key,,unit])=>num(p[key])===null
+                   && !(unit==="n" && ((d.weeks[k]||{}).chk||{}).nights));
+  ab.textContent = empties.length
+    ? "\u2713 Everything matches — fill in the "+empties.length+" line"+(empties.length===1?"":"s")+" left"
+    : "Every line has been checked";
+  ab.disabled = locked || !empties.length;
+  ab.style.opacity = ab.disabled ? ".45" : "1";
 
   const cb=document.getElementById("plClear");
   const n=Object.keys(p).filter(x=>p[x]!==""&&p[x]!==undefined&&p[x]!==null).length;
@@ -2474,6 +2592,33 @@ function bhAutoCheck(){
     if(near.length) alert("Bank holidays have changed for the year ahead:\n\n"+near.map(prettyDate).join("\n")+"\n\nYour hours have been recalculated.");
   }).catch(()=>{ renderBH(); });
 }
+/* ---- a new tax year ----
+   the bands, the student loan thresholds and the personal allowance are all
+   fixed figures for one tax year, and nothing publishes them as data an
+   offline page can fetch. HMRC's APIs are all personal records behind OAuth;
+   the rates themselves live on GOV.UK as prose. So once a year the app has to
+   ask a human instead.
+
+   Fires on the first launch on or after 6 April, then not again until the next
+   one. On a first run it only records where the year stands and says nothing,
+   so upgrading mid-year does not trigger it. */
+function taxYearCheck(){
+  const d=load();
+  const now=taxYearStart(iso(new Date()));
+  if(!d.settings.tyChecked){ d.settings.tyChecked=now; save(); return; }
+  if(d.settings.tyChecked>=now) return;
+  d.settings.tyChecked=now; save();
+
+  const bits=["A new tax year started on 6 April. Three things want checking.",
+    "",
+    "1. Your tax code. It often changes at the start of the year. Take it off your first payslip and put it in Setup."];
+  bits.push(SS("ytdFrom")
+    ? "\n2. Your pay so far this tax year. What is in there now is last year's, so it is being ignored and the estimate is counting only the weeks logged here. Replace it off a new slip, or clear it out."
+    : "\n2. Your pay so far this tax year. Nothing is in there, so the estimate counts only the weeks logged in the app \u2014 which from April is right.");
+  bits.push("\n3. The tax bands and student loan thresholds are built into this app, and they are still last year's until the app itself is updated. If someone sent you this file, ask them for a new one.");
+  alert(bits.join("\n"));
+}
+
 function renderBackup(){
   const sel=document.getElementById("bkEvery");
   const note=document.getElementById("bkNote");
@@ -2618,10 +2763,13 @@ function ytdField(){
   const from=SS("ytdFrom");
   const row=document.createElement("div");
   row.className="field";
+  const stale = from && ytdStale(mondayOf(iso(new Date())));
   row.innerHTML=`<label>Pay so far this tax year
-      <span class="hint">${from
-        ? "\u00a3"+n2(Number(d.settings.ytdTaxable)||0)+" taxable to "+shortDate(from)+", then your own weeks"
-        : "only your logged weeks are counted \u2014 tap to add earlier pay"}</span></label>
+      <span class="hint">${!from
+        ? "only your logged weeks are counted \u2014 tap to add earlier pay"
+        : stale
+          ? "from last tax year, so it is being ignored \u2014 replace it off your first slip of this year"
+          : "\u00a3"+n2(Number(d.settings.ytdTaxable)||0)+" taxable to "+shortDate(from)+", then your own weeks"}</span></label>
     <button class="chip ytb">${from?"edit":"add"}</button>`;
   row.querySelector(".ytb").addEventListener("click",()=>{
     const f=prompt(
@@ -2692,7 +2840,18 @@ function switchTab(t){
   render();
 }
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
+/* how far forward the day and week tabs may run: the end of next week.
+   past that there is nothing to log and nothing to see, and a bank holiday
+   sitting years ahead used to price a week that had not happened yet.
+   the payslip tab keeps its own, tighter limit — the last real payday. */
+function navLimit(){ return addDays(mondayOf(iso(new Date())),13); }
+function navAtEnd(){
+  if(tab==="pay") return plCur()>=addDays(lastPaidWeek(),7);
+  if(tab==="history") return false;
+  return (tab==="day" ? addDays(curDay,1) : addDays(cur(),7)) > navLimit();
+}
 function stepWeekNav(dir){
+  if(dir>0 && navAtEnd()) return;
   if(tab==="pay"){ plWeek=addDays(plCur(),7*dir); }
   else if(tab==="history"){ return; }
   else { curDay=addDays(curDay,(tab==="day"?1:7)*dir); }
@@ -2709,6 +2868,23 @@ document.getElementById("sspIn").addEventListener("change",e=>{
   const d=load(), w=d.weeks[cur()]=d.weeks[cur()]||{};
   w.ssp=e.target.value; save(); render();
 });
+document.getElementById("plAll").addEventListener("click",()=>{
+  const k=plCur(), d=load();
+  if(k>=addDays(lastPaidWeek(),7)) return;          /* not paid yet */
+  const c=calc(k), e=plExpected(k,c);
+  const carryIn=plCarryIn(k)||{};
+  const w=d.weeks[k]=d.weeks[k]||{};
+  w.payslip=w.payslip||{};
+  PL_LINES.forEach(([key,,unit])=>{
+    if(num(w.payslip[key])!==null) return;          /* typed by hand — leave it */
+    const owed=(((w.wo||{})[key]) ? 0 : ((carryIn[key]||{}).owed||0));
+    if(unit==="n"){ w.chk=w.chk||{}; w.chk.nights=1; return; }
+    if(unit==="yn"){ w.payslip[key]=String(e[key].units?1:0); return; }
+    w.payslip[key]=n2(unit==="h" ? e[key].units+owed : e[key].cash+owed);
+  });
+  save(); render();
+});
+
 document.getElementById("plClear").addEventListener("click",()=>{
   const d=load(), w=d.weeks[plCur()];
   if(!w||!w.payslip) return;
@@ -2805,7 +2981,28 @@ if("serviceWorker" in navigator && location.protocol.startsWith("http")){
     navigator.serviceWorker.register("./sw.js").catch(()=>{});
   });
 }
+/* ---- the first-run notice ----
+   shown on a brand new install, and again after an update that changes what it
+   says. NOT tied to BUILD: bumping this on every version would nag people who
+   have already read it. Raise INTRO_REV by hand, and only when the wording
+   actually changes. */
+const INTRO_REV=1;
+function introCheck(){
+  const d=load();
+  if(Number(d.settings.introRev||0) >= INTRO_REV) return;
+  const el=document.getElementById("intro");
+  if(!el) return;
+  el.classList.remove("hidden");
+  document.getElementById("introOk").addEventListener("click",()=>{
+    const dd=load();
+    dd.settings.introRev=INTRO_REV; save();
+    el.classList.add("hidden");
+  });
+}
+
 bhAutoCheck();
+taxYearCheck();
+introCheck();
 if(navigator.storage && navigator.storage.persist){
   navigator.storage.persisted().then(ok=>{ if(!ok) navigator.storage.persist().catch(()=>{}); }).catch(()=>{});
 }
