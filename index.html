@@ -85,10 +85,18 @@ header{
 .nval .pv{font-size:26px;line-height:1;color:var(--amber)}
 .nval .k{font-size:12.5px;color:var(--dim)}
 .hero .fig.one{text-align:center}
+/* the estimate marker: under the figure, above its caption, centred on that
+   figure's own column rather than on the screen. */
+.estb{display:block;width:fit-content;margin:9px auto 0;
+  font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--dim);background:var(--panel-2);border-radius:5px;padding:3px 7px}
+.hero .strip .estb{margin:6px auto 0;font-size:9.5px;padding:2px 5px}
+.field .mci[disabled]{opacity:.4}
+.field .chip.on{border-color:var(--amber);color:var(--amber)}
 .hero .fig.one + .sub{text-align:center}
 .hero .fig.two{display:flex;align-items:flex-start;gap:12px}
-.hero .fig.two .f{flex:1 1 0;min-width:0}
-.hero .fig.two .f.r{text-align:right}
+.hero .fig.two .f{flex:1 1 0;min-width:0;text-align:center}
+.hero .fig.two .f.r{text-align:center}
 .hero .fig.two .n{font-size:36px;line-height:1;display:block}
 .hero .fig.two .n small{font-size:21px}
 .hero .fig.two .lbl{display:block;font-size:12.5px;color:var(--dim);margin-top:7px;letter-spacing:0}
@@ -403,6 +411,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
 
 <div class="hero">
   <div class="fig" id="heroFig">£0<small>.00</small></div>
+  <span class="estb" id="heroEst" style="display:none">estimate</span>
   <div class="sub" id="heroSub">—</div>
   <div class="strip" id="heroStrip"></div>
 </div>
@@ -607,13 +616,14 @@ const DEFAULTS = {
   owedThresh:1,
   backupWeeks:2,
   pensionRate:5, pensionLower:120.00, pensionUpper:967.00,
-  bik:1.15,
-  taxRate:20, taxFree:241.73,
+  bik:1.15, bikOn:1,
+  taxCode:"1257L", slPlan:"",
+  ytdFrom:"", ytdTaxable:"", ytdTax:"",
   niRate:8, niFree:242.00, niUpper:967.00, niRate2:2
 };
 
 /* ============ storage ============ */
-const BUILD="v21";
+const BUILD="v22";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -648,6 +658,8 @@ function save(){
   catch(e){ memOnly=true; }
 }
 const S = k => { const v = load().settings[k]; return (v===undefined||v===null||v==="") ? DEFAULTS[k] : Number(v); };
+/* the string version — tax code and student loan plan are text, not numbers */
+const SS = k => { const v = load().settings[k]; return (v===undefined||v===null||v==="") ? DEFAULTS[k] : String(v); };
 
 /* ============ dates ============ */
 const DAYNAME=["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
@@ -685,6 +697,90 @@ const dec = m => m/60;
 const money = n => "£"+Number(n||0).toLocaleString("en-GB",{minimumFractionDigits:2,maximumFractionDigits:2});
 const n2 = n => Number(n||0).toFixed(2);
 const r2 = n => Math.round(n*100)/100;
+
+/* ============ tax ============ */
+/* the weekly bands. these are annual figures divided by 52:
+     basic  rate covers the first 37,700 of taxable pay above the allowance
+     higher rate then runs to 125,140, so its width is 125,140-12,570-37,700
+   only the slice inside each band is charged at that band's rate — going into
+   higher rate does NOT retax everything below it. */
+const TAX_BANDS=[[r2(37700/52),20],[r2((125140-12570-37700)/52),40],[Infinity,45]];
+
+/* charge x band by band, lowest first.
+   the band widths above are WEEKLY. when this is used cumulatively — several
+   weeks of pay at once — the bands have to grow with it, or the second week of
+   an ordinary wage would look like it had crossed into higher rate. */
+function bandTax(x, weeks){
+  const n = weeks===undefined ? 1 : Math.max(1,weeks);
+  let t=0, rem=x;
+  for(const [w,rate] of TAX_BANDS){
+    if(rem<=0) break;
+    const slice=Math.min(rem, w*n);
+    t += slice*rate/100;
+    rem -= slice;
+  }
+  return t;
+}
+
+/* read a tax code. returns null if it makes no sense, so the caller can say so
+   rather than quietly inventing a number.
+     1257L / 1257M / 1257N / 1257T  -> allowance is the digits times ten
+     K475                            -> negative allowance, added to taxable pay
+     0T                              -> no allowance, bands still apply
+     BR / D0 / D1                    -> every pound at one flat rate (second job)
+     NT                              -> no tax at all
+   a W1/M1/X suffix means non-cumulative; we are approximating anyway, so it is
+   parsed and ignored rather than rejected. */
+function parseTaxCode(raw){
+  const c=String(raw||"").toUpperCase().replace(/[\s\/]/g,"").replace(/(W1|M1|X)$/,"");
+  if(!c) return null;
+  if(c==="NT")            return {kind:"none", free:0, label:"no tax deducted"};
+  if(c==="BR")            return {kind:"flat", rate:20, free:0, label:"every pound at 20%"};
+  if(c==="D0")            return {kind:"flat", rate:40, free:0, label:"every pound at 40%"};
+  if(c==="D1")            return {kind:"flat", rate:45, free:0, label:"every pound at 45%"};
+  if(/^0T$/.test(c))      return {kind:"std", free:0, label:"no tax free pay"};
+  let m=c.match(/^K(\d+)$/);
+  if(m) return {kind:"std", free:-r2(Number(m[1])*10/52),
+                label:"\u00a3"+n2(Number(m[1])*10/52)+" a week ADDED to taxable pay"};
+  m=c.match(/^(\d+)[LMNT]$/);
+  if(m) return {kind:"std", free:r2(Number(m[1])*10/52),
+                label:"\u00a3"+n2(Number(m[1])*10/52)+" a week free of tax"};
+  return null;
+}
+
+/* what a code gives you each week, falling back to the default if it is junk */
+function weeklyFree(){
+  const p=parseTaxCode(SS("taxCode")) || parseTaxCode(DEFAULTS.taxCode);
+  return p.free;
+}
+
+/* tax on one week in isolation — no year-to-date, every week treated the same.
+   this is the fallback, and what runs while the cumulative sum is being built. */
+function taxWeekly(taxable){
+  const p=parseTaxCode(SS("taxCode")) || parseTaxCode(DEFAULTS.taxCode);
+  if(p.kind==="none") return 0;
+  if(p.kind==="flat") return r2(Math.max(0,taxable)*p.rate/100);
+  return r2(bandTax(Math.max(0, taxable - p.free)));
+}
+
+/* ============ student loan ============ */
+/* threshold is annual, the rate is a percentage of earnings above it.
+   deductions are worked out on NI-able pay and rounded DOWN to whole pounds,
+   which is how payroll does it. */
+const SL_PLANS={
+  "":          null,
+  "plan1":     {name:"Plan 1",       annual:26065, rate:9},
+  "plan2":     {name:"Plan 2",       annual:28470, rate:9},
+  "plan4":     {name:"Plan 4",       annual:32745, rate:9},
+  "pg":        {name:"Postgraduate", annual:21000, rate:6}
+};
+function studentLoan(niable){
+  const p=SL_PLANS[SS("slPlan")||""];
+  if(!p) return 0;
+  const wk=p.annual/52;
+  return Math.max(0, Math.floor((niable-wk)*p.rate/100));
+}
+
 const money2 = n => { const p=Number(n||0).toFixed(2).split(".");
   return "\u00a3"+(+p[0]).toLocaleString("en-GB")+"<small>."+p[1]+"</small>"; };
 const num = v => (v===undefined||v===null||v==="") ? null : Number(v);
@@ -977,22 +1073,29 @@ function calc(monKey, skip){
      taxable figure alongside the night out and the meal. */
   const beforePension=basicPay+holPay+otPay+satPay+sunPay+bhwPay+nightPay+mealPay+attPay+ssp+expenses;
   const cash=beforePension-pension;
-  const taxable=cash+S("bik")-nightPay-mealPay-expenses;
-  const tax=Math.max(0,taxable-S("taxFree"))*S("taxRate")/100;
-  const niable=taxable-S("bik");
+  /* the Medicash benefit is notional — it is taxed but never paid in cash, and
+     not everyone subscribes, so it only counts when it is switched on. */
+  const bik = S("bikOn") ? S("bik") : 0;
+  const taxable=cash+bik-nightPay-mealPay-expenses;
+  const niable=taxable-bik;
+  /* a partial week (the day view asks for "the week without today") is a
+     working figure, not a real week — cumulative tax on it would be wrong and
+     would cost a full year-to-date sum every time the day tab redraws. */
+  const tax=skip?taxWeekly(taxable):taxFor(monKey, taxable);
+  const sloan=studentLoan(niable);
   /* NI is 8% between the threshold and the upper earnings limit, then 2%
      above it. leaving the upper band out was what made it read high. */
   const niMain=Math.max(0,Math.min(niable,S("niUpper"))-S("niFree"))*S("niRate")/100;
   const niUp=Math.max(0,niable-S("niUpper"))*S("niRate2")/100;
   const ni=r2(niMain+niUp);
-  const net=cash-tax-ni;
+  const net=cash-tax-ni-sloan;
 
   return {
     dates, lines:L, nights, bhDays, bhMins, bhWorkedMins, bhWorkedPaid,
     holDays, holMins, sickDays, ssp, sspPred, sickRate, expenses, expItems,
     workedMins, paidMins:basicMins+otMins+satPaid+sunPaid+bhWorkedPaid,
     basicMins, basicWorked, holBasic, otMins, satPaid, sunPaid,
-    beforePension, pension, pensionable, cash, taxable, tax, ni, net,
+    beforePension, pension, pensionable, cash, taxable, tax, ni, sloan, net,
     driveMins, extDrive, redRest, shortRest, assumedDrive,
     wtdMins, wtdDays, wtdMissing,
     attEarned, attMissed, attPending, attPay,
@@ -1208,6 +1311,124 @@ function paydayLabel(k){
   const p=paydayOf(k);
   return "paid "+DAYSHORT[dowIndex(p)]+" "+shortDate(p);
 }
+
+/* ============ tax year to date ============ */
+/* the tax year starts on 6 April. tax week 1 is the week containing it. */
+function taxYearStart(ds){
+  const y=Number(ds.slice(0,4));
+  const start=y+"-04-06";
+  return ds>=start ? start : (y-1)+"-04-06";
+}
+function taxWeekOf(ds){
+  const st=mondayOf(taxYearStart(ds));
+  const days=Math.round((fromIso(mondayOf(ds))-fromIso(st))/86400000);
+  return Math.floor(days/7)+1;
+}
+
+/* guard: while the year-to-date total is being summed we must not try to be
+   cumulative again for each week inside it, or it recurses forever. the inner
+   weeks only need their TAXABLE figure, which does not depend on tax at all. */
+let ytdBusy=false;
+
+/* the year-to-date basis for week k: how much taxable pay has been earned so
+   far, and how many weeks of allowance go with it.
+
+   two cases, and the difference matters:
+
+   WITH a handover figure typed in, the app knows the whole year. The week
+   number is the real tax week, counted from 6 April, so the allowance given is
+   the allowance actually due. This is the accurate mode.
+
+   WITHOUT one, the app only knows the weeks logged in it. Counting from 6 April
+   would hand out allowance for weeks it has no earnings for, and the estimate
+   would show no tax at all for months. So instead it counts from the first week
+   logged — cumulative from when you started using this, not from April. Less
+   accurate, but it does not invent relief that is not there. */
+function cumBasis(k){
+  const d=load(), st=mondayOf(taxYearStart(k));
+  const hand=SS("ytdFrom");
+  let from, weeks, total=0;
+
+  if(hand){
+    total = Number(d.settings.ytdTaxable)||0;
+    /* the week AFTER the one that slip paid for */
+    from  = addDays(weekPaidOn(hand),7);
+    if(from<st) from=st;
+    /* HMRC counts tax periods by PAYMENT date, not by the week worked. the slip
+       for the week beginning 24/08 is period 22 because it was paid on 04/09.
+       using the work week here gives every week one period too few, and one
+       week too little allowance with it. */
+    weeks = taxWeekOf(paydayOf(k));
+  }else{
+    from = firstLoggedWeek(st,k);
+    if(!from) return null;
+    weeks = Math.round((fromIso(k)-fromIso(from))/604800000)+1;
+  }
+  if(weeks<1) return null;
+
+  ytdBusy=true;
+  try{
+    for(let wk=from; wk<=k; wk=addDays(wk,7)){
+      const c=calc(wk);
+      /* a week with nothing in it is not a paid week — it must not contribute
+         the notional Medicash benefit, or an empty year quietly accrues tax. */
+      if(c.hasData) total += c.taxable;
+    }
+  } finally { ytdBusy=false; }
+  return {cum:r2(total), weeks};
+}
+
+/* which WORK week a given paydate actually pays for.
+   this is the inverse of paydayOf, and it matters: a slip dated 04/09 pays the
+   week beginning 24/08, not the week the paydate itself falls in. getting this
+   wrong skips a week of earnings out of the year-to-date total. searched rather
+   than subtracted, so a bank-holiday shift is handled. */
+function weekPaidOn(payDate){
+  let k=mondayOf(addDays(payDate,-11));
+  for(let i=-2;i<=2;i++){
+    const cand=addDays(k,7*i);
+    if(paydayOf(cand)===payDate) return cand;
+  }
+  return k;
+}
+
+/* the earliest week inside this tax year that has anything logged in it */
+function firstLoggedWeek(st,k){
+  const d=load();
+  let best=null;
+  for(const ds in d.days){
+    if(ds<st || ds>addDays(k,6)) continue;
+    const m=mondayOf(ds);
+    if(m>k) continue;
+    if(!best || m<best) best=m;
+  }
+  for(const wk in d.weeks){
+    if(wk<st || wk>k) continue;
+    if(!best || wk<best) best=wk;
+  }
+  return best;
+}
+
+/* kept for the tests and for anything that wants the plain total */
+function taxableToDate(k){ const b=cumBasis(k); return b?b.cum:0; }
+
+/* tax for week k: work out what is due on everything earned so far, then take
+   off what the earlier weeks already carried. that is what real payroll does,
+   and it is why a big overtime week settles itself the week after instead of
+   staying wrong. */
+function taxFor(k, taxableThisWeek){
+  const p=parseTaxCode(SS("taxCode")) || parseTaxCode(DEFAULTS.taxCode);
+  if(p.kind==="none") return 0;
+  if(p.kind==="flat") return r2(Math.max(0,taxableThisWeek)*p.rate/100);
+  if(ytdBusy) return taxWeekly(taxableThisWeek);
+  const b=cumBasis(k);
+  if(!b) return taxWeekly(taxableThisWeek);
+  const prev = r2(b.cum - taxableThisWeek);
+  const dueNow  = bandTax(Math.max(0, b.cum - p.free*b.weeks), b.weeks);
+  const duePrev = bandTax(Math.max(0, prev  - p.free*Math.max(0,b.weeks-1)), b.weeks-1);
+  return r2(Math.max(0, dueNow-duePrev));
+}
+
 /* a week only accepts payslip figures once its payday has been. before that
    there is no slip in his hand to copy from, so the tab shows predictions and
    locks the inputs. this unlocks itself on the payday — nothing to switch. */
@@ -1230,13 +1451,16 @@ function lastPaidWeek(){
    week still shows its real figure, however small. */
 function heroNet(fig,sub,c){
   fig.className="fig one";
+  const est=document.getElementById("heroEst");
   if(!c.hasData){
     fig.innerHTML="\u2014";
+    if(est) est.style.display="none";
     sub.textContent="nothing logged this week yet";
     return;
   }
   const p=c.net.toFixed(2).split(".");
   fig.innerHTML="\u00a3"+(+p[0]).toLocaleString("en-GB")+"<small>."+p[1]+"</small>";
+  if(est) est.style.display="";
   sub.textContent="take-home this week";
 }
 
@@ -1268,6 +1492,10 @@ function render(){
 
   const fig=document.getElementById("heroFig"), sub=document.getElementById("heroSub"), strip=document.getElementById("heroStrip");
   fig.className="fig"; sub.style.display="";
+  /* only the week hero uses the shared marker — the two-figure heroes carry
+     their own, one under each number. */
+  const hEst=document.getElementById("heroEst");
+  if(hEst) hEst.style.display="none";
   if(tab==="day"){
     const r=load().days[curDay]||{}, mins=duration(r.start,r.end);
     /* today's own gross on the left, the week's take-home so far on the right.
@@ -1281,8 +1509,10 @@ function render(){
     fig.className="fig two";
     fig.innerHTML=
       "<span class=\"f\"><span class=\"n\">"+(dayLogged&&dayGross!==null?money2(dayGross):"\u2014")+"</span>"+
+        (dayLogged&&dayGross!==null?"<span class=\"estb\">estimate</span>":"")+
         "<span class=\"lbl\">today before tax</span></span>"+
       "<span class=\"f r\"><span class=\"n\">"+(c.hasData?money2(c.net):"\u2014")+"</span>"+
+        (c.hasData?"<span class=\"estb\">estimate</span>":"")+
         "<span class=\"lbl\">week after tax</span></span>";
     sub.textContent = c.hasData ? "" : "nothing logged this week yet";
     sub.style.display = sub.textContent ? "" : "none";
@@ -1295,8 +1525,10 @@ function render(){
     fig.className="fig two";
     fig.innerHTML=
       "<span class=\"f\"><span class=\"n\">"+money2(t.expPay)+"</span>"+
+        "<span class=\"estb\">estimate</span>"+
         "<span class=\"lbl\">"+pw+" before tax</span></span>"+
       "<span class=\"f r\"><span class=\"n\">"+money2(pc.net)+"</span>"+
+        "<span class=\"estb\">estimate</span>"+
         "<span class=\"lbl\">"+pw+" after tax</span></span>";
     sub.textContent = !plHasAny(plCur()) ? ""
       : Math.abs(gap)<0.01 ? "the slip matches"
@@ -1325,7 +1557,7 @@ function render(){
     strip.innerHTML=
       "<span class=\"s\"><span class=\"v\">"+hm(c.workedMins)+"</span><span class=\"k\">worked</span></span>"+
       "<span class=\"s\"><span class=\"v\">"+hm(c.paidMins)+"</span><span class=\"k\">paid</span></span>"+
-      "<span class=\"s\"><span class=\"v\">"+money2(c.cash)+"</span><span class=\"k\">gross</span></span>";
+      "<span class=\"s\"><span class=\"v\">"+money2(c.cash)+"</span><span class=\"estb\">estimate</span><span class=\"k\">gross</span></span>";
   }
 
   if(tab==="day")     renderDay(c);
@@ -1634,6 +1866,10 @@ function renderLedger(c){
   h+=`<div class="lrow"><span class="d">Taxable pay</span><span class="u"></span><span class="c">${n2(c.taxable)}</span></div>`;
   h+=`<div class="lrow neg"><span class="d">Tax</span><span class="u"></span><span class="c">−${n2(c.tax)}</span></div>`;
   h+=`<div class="lrow neg"><span class="d">National Insurance</span><span class="u"></span><span class="c">−${n2(c.ni)}</span></div>`;
+  if(c.sloan>0){
+    const sp=SL_PLANS[SS("slPlan")||""];
+    h+=`<div class="lrow neg"><span class="d">Student loan${sp?" ("+sp.name+")":""}</span><span class="u"></span><span class="c">−${n2(c.sloan)}</span></div>`;
+  }
   h+=`<div class="lrow tot"><span class="d">Net</span><span class="u"></span><span class="c">${n2(c.net)}</span></div>`;
   box.innerHTML=h;
 }
@@ -2062,7 +2298,7 @@ function csv(){
   const rows=[["Date","Day","Week beginning","Payday","Start","Finish","Hours worked","Bank holiday","Holiday","Sick","Night out","Expenses",
     "Driving h","Driving assumed","Rest before (h)","Rest in 24h window (h)","Rest type",
     "Week holiday days","Week sick days","Week basic h","Week holiday h","Week OT h","Week Sat h","Week Sun h","Week BH worked h","Week nights",
-    "Week gross","Week tax","Week NI","Week net",
+    "Week gross","Week tax","Week NI","Week student loan","Week net",
     "Slip hours","Expected hours","Slip before tax","Expected before tax","Slip vs expected"]];
   weeksWithData().sort().forEach(k=>{
     const c=calc(k); if(!c.hasData&&!plHasAny(k)) return;
@@ -2079,7 +2315,7 @@ function csv(){
         i===0?c.holDays:"",i===0?c.sickDays:"",i===0?dec(c.basicWorked).toFixed(2):"",i===0?dec(c.holBasic).toFixed(2):"",i===0?dec(c.otMins).toFixed(2):"",
         i===0?dec(c.satPaid).toFixed(2):"",i===0?dec(c.sunPaid).toFixed(2):"",
         i===0?dec(c.bhWorkedPaid).toFixed(2):"",i===0?c.nights:"",
-        i===0?n2(c.cash):"",i===0?n2(c.tax):"",i===0?n2(c.ni):"",i===0?n2(c.net):"",
+        i===0?n2(c.cash):"",i===0?n2(c.tax):"",i===0?n2(c.ni):"",i===0?n2(c.sloan):"",i===0?n2(c.net):"",
         i===0&&t?n2(t.slipH):"",i===0&&t?n2(t.expH):"",
         i===0&&t?n2(t.slipPay):"",i===0&&t?n2(t.expPay):"",
         i===0&&t?n2(t.slipPay-t.expPay):""]);
@@ -2186,9 +2422,10 @@ const SETUP_DED=[
   ["pensionRate","Pension %","of qualifying earnings, off before tax"],
   ["pensionLower","Pension lower limit","nothing is taken below this"],
   ["pensionUpper","Pension upper limit","nothing is taken above this"],
-  ["bik","Medicash benefit","taxable but not paid in cash"],
-  ["taxFree","Tax free each week","1257L spread over 52 weeks"],
-  ["taxRate","Tax rate %","basic rate"],
+  ["bik","Medicash benefit","taxable but not paid in cash","medicash"],
+  ["taxCode","Tax code","","taxcode"],
+  ["slPlan","Student loan","","sloan"],
+  ["ytd","Pay so far this tax year","","ytd"],
   ["niFree","NI threshold each week","primary threshold"],
   ["niRate","NI rate %","main employee rate"],
   ["niUpper","NI upper limit","above this the rate drops"],
@@ -2286,12 +2523,142 @@ function sickField(){
   return row;
 }
 
+/* ---- the tax code row ----
+   changing it is gated: the figure it moves is a guess, and a wrong code makes
+   a confident-looking wrong number. same spirit as the wipe confirmation. */
+const TAX_WARN =
+  "This is an estimate only.\n\n"+
+  "Changing your tax code changes the take-home figure this app shows you. "+
+  "It does NOT make that figure right.\n\n"+
+  "Real payroll recalculates your whole year every week using figures this app "+
+  "cannot see. If you have changed jobs, started mid-year, or have anything "+
+  "unusual on your code, the number can be a long way out.\n\n"+
+  "For the closest estimate, also fill in \u201cPay so far this tax year\u201d "+
+  "below \u2014 without it the app only knows the weeks you have logged here.\n\n"+
+  "Your payslip is the truth. This is a guess.\n\n"+
+  "Type  understood  to carry on.";
+
+function taxCodeField(){
+  const d=load();
+  const code=SS("taxCode");
+  const p=parseTaxCode(code);
+  const row=document.createElement("div");
+  row.className="field";
+  row.innerHTML=`<label>Tax code
+      <span class="hint tcHint">${p ? p.label : "not a tax code the app recognises \u2014 using "+DEFAULTS.taxCode}</span></label>
+    <input class="tc" value="${esc(code)}" style="width:104px" autocapitalize="characters">`;
+  if(!p) row.querySelector(".tcHint").style.color="var(--red)";
+  const inp=row.querySelector(".tc");
+  inp.addEventListener("change",()=>{
+    const v=inp.value.trim().toUpperCase();
+    if(v===code.toUpperCase()) return;
+    if(!parseTaxCode(v)){
+      alert("\u201c"+v+"\u201d is not a tax code the app understands.\n\n"+
+            "It expects something like 1257L, K475, 0T, BR, D0, D1 or NT.");
+      inp.value=code; return;
+    }
+    const said=prompt(TAX_WARN,"");
+    if(said===null || said.trim().toLowerCase()!=="understood"){ inp.value=code; return; }
+    d.settings.taxCode=v; save(); render();
+  });
+  return row;
+}
+
+/* ---- student loan ---- */
+function sloanField(){
+  const d=load();
+  const cur=SS("slPlan")||"";
+  const p=SL_PLANS[cur];
+  const row=document.createElement("div");
+  row.className="field";
+  const opts=[["","None"],["plan1","Plan 1"],["plan2","Plan 2"],["plan4","Plan 4"],["pg","Postgraduate"]]
+    .map(([v,n])=>`<option value="${v}"${v===cur?" selected":""}>${n}</option>`).join("");
+  row.innerHTML=`<label>Student loan
+      <span class="hint">${p
+        ? p.rate+"% of anything over \u00a3"+n2(p.annual/52)+" a week"
+        : "nothing deducted"}</span></label>
+    <select class="sl">${opts}</select>`;
+  row.querySelector(".sl").addEventListener("change",e=>{
+    const v=e.target.value;
+    if(v==="") delete d.settings.slPlan; else d.settings.slPlan=v;
+    save(); render();
+  });
+  return row;
+}
+
+/* ---- Medicash: a tick as well as the amount, because not everyone
+   subscribes and the plans are not all the same money ---- */
+function medicashField(){
+  const d=load();
+  const on=!!S("bikOn");
+  const row=document.createElement("div");
+  row.className="field";
+  row.innerHTML=`<label>Medicash benefit
+      <span class="hint">${on?"taxable but not paid in cash":"not subscribed \u2014 left out of the tax"}</span></label>
+    <button class="chip mcb${on?" on":""}">${on?"yes":"no"}</button>
+    <input class="mci si" inputmode="decimal" value="${n2(S("bik"))}"${on?"":" disabled"}>`;
+  row.querySelector(".mcb").addEventListener("click",()=>{
+    if(on) d.settings.bikOn=0; else d.settings.bikOn=1;
+    save(); render();
+  });
+  row.querySelector(".mci").addEventListener("change",e=>{
+    const v=e.target.value.trim();
+    if(v==="") delete d.settings.bik; else d.settings.bik=Number(v);
+    save(); render();
+  });
+  return row;
+}
+
+/* ---- pay so far this tax year ----
+   only needed until a full tax year has been logged in the app. the paydate is
+   the handover: everything up to it comes from what was typed, everything after
+   it from the weeks logged here, so nothing is counted twice. */
+function ytdField(){
+  const d=load();
+  const from=SS("ytdFrom");
+  const row=document.createElement("div");
+  row.className="field";
+  row.innerHTML=`<label>Pay so far this tax year
+      <span class="hint">${from
+        ? "\u00a3"+n2(Number(d.settings.ytdTaxable)||0)+" taxable to "+shortDate(from)+", then your own weeks"
+        : "only your logged weeks are counted \u2014 tap to add earlier pay"}</span></label>
+    <button class="chip ytb">${from?"edit":"add"}</button>`;
+  row.querySelector(".ytb").addEventListener("click",()=>{
+    const f=prompt(
+      "Which payslip are these figures from?\n\n"+
+      "Its paydate, as YYYY-MM-DD. Weeks paid AFTER it are taken from what you "+
+      "have logged here, so nothing is counted twice.\n\n"+
+      "Leave it empty to remove these figures.", from||"");
+    if(f===null) return;
+    if(f.trim()===""){
+      delete d.settings.ytdFrom; delete d.settings.ytdTaxable; delete d.settings.ytdTax;
+      save(); render(); return;
+    }
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(f.trim())){ alert("That is not a date the app can read. It wants YYYY-MM-DD."); return; }
+    const tp=prompt("Taxable pay to date on that payslip.\n\nOff a P45 if you have changed jobs, or the year-to-date box on the slip itself.",
+      d.settings.ytdTaxable!==undefined?String(d.settings.ytdTaxable):"");
+    if(tp===null) return;
+    const tx=prompt("Tax paid to date on that same payslip.",
+      d.settings.ytdTax!==undefined?String(d.settings.ytdTax):"");
+    if(tx===null) return;
+    d.settings.ytdFrom=f.trim();
+    d.settings.ytdTaxable=Number(String(tp).replace(/[^\d.\-]/g,""))||0;
+    d.settings.ytdTax=Number(String(tx).replace(/[^\d.\-]/g,""))||0;
+    save(); render();
+  });
+  return row;
+}
+
 function renderSetup(){
   const d=load();
   const build=(list,el)=>{
     el.innerHTML="";
     list.forEach(([k,name,hint,kind])=>{
       if(kind==="sick"){ el.appendChild(sickField()); return; }
+      if(kind==="taxcode"){ el.appendChild(taxCodeField()); return; }
+      if(kind==="sloan"){   el.appendChild(sloanField());   return; }
+      if(kind==="medicash"){el.appendChild(medicashField());return; }
+      if(kind==="ytd"){     el.appendChild(ytdField());     return; }
       const row=document.createElement("div");
       row.className="field";
       row.innerHTML=`<label>${name}<span class="hint">${hint.replace("{cap}",S("basicCap"))}</span></label>
@@ -2309,7 +2676,7 @@ function renderSetup(){
   document.getElementById("verNote").textContent =
     "Build "+BUILD+". "+
     (memOnly?"Storage is blocked here, so nothing will survive a reload — it will work once it is on your phone. ":"")+
-    "Everything stays on this device. Tax and NI are close but not penny-exact; the payslip is the truth.";
+    "Everything stays on this device. Tax, NI and student loan are estimates \u2014 anything marked \u201cestimate\u201d is the app working it out, not a figure anyone has paid you. The payslip is the truth. What you would query with payroll is compared in hours, never in pounds.";
 }
 
 /* ============ wiring ============ */
