@@ -18,16 +18,17 @@ This file exists so a future conversation can pick the project up cold.
 | `icon-180.png`, `icon-192.png`, `icon-512.png`, `icon.svg` | Home-screen icons |
 | `preview-*.html` | Throwaway design mockups. **Not part of the app. Never upload these.** |
 | `hourbook-backup-*.json` | Exported data. **Never put these on GitHub — the repo is public and these are his hours.** |
+| `hourbook-ytd-*.json` | A hand-built import file — year-to-date figures off a slip, plus a day. Same rule: **never on GitHub.** |
 
 ---
 
 ## Version discipline
 
-`const BUILD="v21"` in `index.html` and `const CACHE = "hourbook-v21"` in `sw.js`
+`const BUILD="v22"` in `index.html` and `const CACHE = "hourbook-v22"` in `sw.js`
 **must be bumped together on every change.** The test `build.js` fails if they
 drift. The build number is shown in More → Everything else.
 
-Current version: **v21**.
+Current version: **v22**.
 
 ---
 
@@ -105,10 +106,21 @@ August slip, £700 basic + £50 attendance giving £29.00, which is 5% of £580 
 
 **NI** is 8% between £242 and £967, then 2% above £967.
 
-**Tax** is cumulative 1257L, roughly £241.73 free pay a week. The model is close
-but *not* penny-exact, and the app says so. Niable pay is payments minus meal,
-night out and expenses. Taxable is niable plus £1.15 Medicash BIK. Pension shows
-as a negative line inside Payments.
+**Tax** — see the v22 section below; it is now cumulative and matches all five
+slips within 14p. Niable pay is payments minus meal, night out and expenses.
+Taxable is niable plus the Medicash BIK. Pension shows as a negative line inside
+Payments.
+
+**Gross is after the pension.** Proved by arithmetic on all five slips, not by
+how the page looks: the pay lines total £1,159.49 on the 4 September slip, the
+sacrifice line takes off £42.35, and the printed Payments total is £1,117.14
+exactly. Payments minus Deductions equals the printed NET every time. Salary
+sacrifice means the money is never legally pay, which is why it is off before
+the total and why tax relief follows. `c.cash` is the figure to display as gross
+and it already does this — do not "fix" it to show the pre-sacrifice number.
+
+**The Medicash BIK sits in the Payments column but is excluded from the
+Payments total.** It is notional; it exists to be taxed, never paid in cash.
 
 ---
 
@@ -297,13 +309,46 @@ the strips explain where it came from.
 ## Backups
 
 `doBackup()` is `JSON.stringify(load())` — the whole store verbatim. There is no
-field list to forget, so nothing can be missed. Proven by `bkp2.js`.
+field list to forget, so nothing can be missed. Proven by `bkp2.js`, and
+re-proven for the v22 settings by `bkp3.js` (43 checks), which drives a full
+round trip through the real file input rather than asserting from the source.
+
+`bkp3.js` confirms the file carries the tax code, student loan plan, Medicash
+tick and amount, all three year-to-date fields, every rate and threshold, hours,
+night-out flags, tacho `drive`/`other`, expenses to the penny with parking
+flags, sick days, holidays, payslip figures, write-offs and checked flags.
+
+**`lastBackup` is legitimately absent from the file.** It is stamped a moment
+*after* the download is written, so a restored backup never claims to have
+backed itself up. Not a bug — do not "fix" it.
 
 **Restore semantics matter.** Import merges at the top level, so empty `weeks` or
 `settings` in a file leave the phone's untouched. But days are restored with
 `Object.assign(mem.days, incDays)`, which replaces **whole day objects**. So
 restoring a file that lacks `drive`/`other` on a date that already has them will
 **wipe those fields**. Import warns on clashes and says the backup wins.
+
+### Hand-built import files
+
+A backup file does not have to be a whole export. Because settings merge key by
+key and only the named days are replaced, a file containing just a few settings
+and one day is a safe, surgical way to push a change onto the phone — nothing
+it does not mention can be touched.
+
+`hourbook-ytd-2026-09-08.json` is the worked example: three year-to-date
+settings off the 04/09 slip, plus one day carrying a start time. `imp2.js`
+proves it against a seeded copy of a real week — the figures land, and the
+other days, the tacho hours, the rates and the tax code are all still there
+afterwards.
+
+Two things to keep in mind when building one:
+
+- **The app must already understand the settings.** Push a file with v22
+  settings onto a v21 build and they sit in storage doing nothing. Upload
+  `index.html` and `sw.js` first, import second.
+- **The named day is replaced whole.** A file giving only `start` will drop an
+  `end`, a night-out tick or tacho figures already on that date. Fine for a day
+  in progress, dangerous for a finished one.
 
 ---
 
@@ -320,13 +365,15 @@ finish-time handler; the gov.uk fetch does not.
 
 ## Tests
 
-29 suites in `/home/claude/t/`, all green as of v21. Run with `node <file>.js`.
+37 suites in `/home/claude/t/`, 830 checks, all green as of v22. Run with
+`node <file>.js`. (`dom.js` is the bootstrap and prints no count of its own.)
 
 `test.js` · `hol.js` · `new2.js` · `holui.js` · `dom.js` · `hdr.js` · `imp.js` ·
 `wipe.js` · `holpay.js` · `holui2.js` · `backup.js` · `bhseed.js` · `bhapi.js` ·
 `dur.js` · `mig.js` · `pay2.js` · `ui3.js` · `ui4.js` · `gap.js` · `build.js` ·
 `att.js` · `attday.js` · `lock.js` · `bkp2.js` · `carry.js` · `carryui.js` ·
-`sick.js` · `window.js`
+`sick.js` · `window.js` · `exp.js` · `exp2.js` · `fold.js` · `tax.js` ·
+`ytd.js` · `slips.js` · `ui5.js` · `bkp3.js` · `imp2.js`
 
 Other `.js` files in that directory are scratch and can be ignored.
 
@@ -347,18 +394,59 @@ Other `.js` files in that directory are scratch and can be ignored.
   `renderDay(calc(mondayOf(curDay)))`, not bare, or it throws on `c.workedMins`.
 - `hm()` renders `"10h"`, not `"10h 00"`.
 - Money renders as `£140<small>.00</small>`, so regexes must allow the tag.
+- `DAYNAME` is full names, `SHORTDAY` is the abbreviated set. A regex for
+  `/Mon · x/` fails against `DAYNAME`.
+- The source uses literal `–` and `·` characters, not `\u` escapes, so Python
+  patches must use the real characters.
+- The week after `lastPaidWeek()` is still locked, so two-week carry tests must
+  use `lastPaidWeek()-7` and `lastPaidWeek()`.
+- Multi-line `node -e` from bash fails. Write a `.js` file instead.
+- Config field selectors: tax code `.tc`, student loan `.sl`, Medicash tick
+  `.mcb` and amount `.mci`, year-to-date button `.ytb`. Expense amount `.eamt`,
+  description `.edsc`, parking `.epk`, add `.eadd`. Sick chip `.sk`, input
+  `.si`, basis `.sb`.
+- **`renderSetup()` rebuilds the rows every time.** Re-query the element after
+  any click that calls `render()`, or you hold a detached node.
+
+**A patching lesson from v22, worth not repeating.** Two `str.index()` bounds
+were used to replace a block, and the second range silently swallowed
+`plLocked`, `lastPaidWeek` and `paydayLabel`, which sat between the two markers.
+The tests caught it. After any large structural patch, run:
+
+```
+python3 -c "
+import re
+a=open('v21-backup.html').read(); b=open('work.html').read()
+na=set(re.findall(r'function (\w+)\s*\(',a)); nb=set(re.findall(r'function (\w+)\s*\(',b))
+print('LOST:', sorted(na-nb) or 'none')"
+```
+
+Also check for duplicate function names — an accidental double-insert defines a
+function twice and the later one silently wins.
 
 ---
 
 ## Still open
 
-1. **Sunday rate is a guess** (£20.96). Correct it in Setup when a Sunday
-   actually gets paid.
+1. **Sunday rate is a guess** (£20.96). He never works Sundays, so it can stay.
+   Correct it in Setup if one ever gets paid.
 2. **Weekly rest payback** is a dated reminder, not a running balance. Offered to
    make it tick off; no answer yet.
-3. Tax model is close but not penny-exact.
-4. Possible later: wiring an Anthropic API key so the app could read payslip and
+3. **Student loan thresholds are hardcoded 2026/27 figures** and change annually.
+   Same for the tax bands in `TAX_BANDS`. Neither is in config. Revisit each
+   April, or move them to Setup if a colleague trips over it.
+4. **The personal allowance taper above £100,000 is not modelled.** Irrelevant
+   here, but it would make a high earner's estimate wrong.
+5. **One shift per calendar day.** `d.days[curDay]` is a single record. A double
+   shift cannot be logged. Not built.
+6. **No delete button on an expense row** — clear the amount to £0.00 and tap
+   away. A deliberate trade; revisit if it annoys him.
+7. Possible later: wiring an Anthropic API key so the app could read payslip and
    clock-in photographs directly.
+8. Vit to chase payroll about the unpaid sick absence — check the date against
+   6 April 2026, when the three waiting days were abolished.
+9. If colleagues start finding their own payslip errors, that becomes a bigger
+   conversation with payroll than just his. Flagged, no response yet.
 
 ---
 
@@ -547,3 +635,170 @@ inherited from an earlier week.
 The write-off is now applied on the way out as well. This mattered beyond the
 UI annoyance — without it the payroll sheet would have listed amounts he had
 already dismissed. Covered by `exp2.js`.
+
+---
+
+## Tax codes, student loans and the estimate marker (v22)
+
+### The tax code
+
+`settings.taxCode`, default `1257L`. It replaces the old `taxFree` and `taxRate`
+settings, both of which are **gone from config** — the code supplies free pay and
+the bands are built in. `parseTaxCode()` handles:
+
+| Code | Meaning |
+| --- | --- |
+| `1257L` `1382M` `1131N` `1000T` | allowance = digits × 10, ÷ 52 for the week |
+| `K475` | **negative** allowance — added to taxable pay, not subtracted |
+| `0T` | no allowance, bands still apply |
+| `BR` / `D0` / `D1` | every pound at 20 / 40 / 45%, no allowance |
+| `NT` | no tax at all |
+
+A `W1`, `M1` or `X` suffix is parsed and ignored — the model is an approximation
+anyway, so rejecting them would help nobody. Anything else returns `null` and the
+input refuses the change with an explanation rather than inventing a number.
+
+### The bands are per-week and scale with the count
+
+`TAX_BANDS` holds weekly widths: £725.00 at 20% (37,700 ÷ 52), then
+£1,439.23 at 40%, then 45%. **Only the slice inside each band is charged at that
+band's rate.** Crossing into higher rate does not retax what sits below it.
+
+`bandTax(x, weeks)` takes a week count because the same function is used
+cumulatively. **This caused a real bug during the build**: feeding a two-week
+cumulative total through one-week bands made an ordinary second week look like it
+had crossed into 40%. If `bandTax` is ever called without `weeks`, it defaults to
+1 — correct for a single week, wrong for anything cumulative.
+
+### Cumulative, and why the week count has two sources
+
+`taxFor(k, taxable)` works out the tax due on everything earned so far this tax
+year, then subtracts what the earlier weeks already carried. This is what real
+payroll does, and it is why a big overtime week settles itself the following week
+instead of staying wrong.
+
+`cumBasis(k)` returns `{cum, weeks}` and has two modes:
+
+- **With a year-to-date figure**, `weeks` is the real tax period, counted from
+  6 April by payday (see the traps below). Accurate.
+- **Without one**, `weeks` counts from the first week logged in the app. This is
+  deliberate. Counting from 6 April would hand out allowance for weeks the app
+  has no earnings for, and a colleague starting in June would see **zero tax for
+  months** — a confident, badly wrong number. Counting from the first logged week
+  is less accurate but does not invent relief.
+
+`ytdBusy` guards the recursion: `cumBasis` calls `calc()` for each week, and
+`calc()` calls `taxFor()`. While the sum is running, `taxFor` falls back to the
+simple weekly model. The inner weeks only need their `taxable`, which does not
+depend on tax at all.
+
+`calc(monKey, skip)` with `skip` set (the day view asking for "the week without
+today") uses `taxWeekly` too — a partial week is a working figure, and going
+cumulative on it would be both wrong and expensive.
+
+**Empty weeks contribute nothing.** `cumBasis` skips weeks where `hasData` is
+false. Without that check, an empty week still contributed the £1.15 Medicash
+benefit and an idle year quietly accrued taxable pay.
+
+### Accuracy against the real slips (`slips.js`)
+
+Using each slip's own year-to-date boxes:
+
+| Paydate | Tax week | Model | Slip | Out by |
+| --- | --- | --- | --- | --- |
+| 31/07/2026 | 17 | 181.14 | 181.00 | 0.14 |
+| 07/08/2026 | 18 | 66.70 | 66.60 | 0.10 |
+| 21/08/2026 | 20 | 96.08 | 96.00 | 0.08 |
+| 28/08/2026 | 21 | 161.42 | 161.40 | 0.02 |
+| 04/09/2026 | 22 | 151.31 | 151.20 | 0.11 |
+
+The old flat weekly model was out by **£36.29** on 31 July and £16.44 on
+28 August. The remaining pennies are HMRC's own rounding.
+
+### Pay so far this tax year
+
+Three settings: `ytdFrom` (a paydate), `ytdTaxable`, `ytdTax`. Off a P45 if the
+person changed jobs, or the year-to-date box on any payslip.
+
+**`ytdFrom` is a handover, not a start date.** Everything up to and including
+that slip comes from the typed figures; weeks paid *after* it come from what has
+been logged here.
+
+**Two date traps here, both found by checking against a real slip. Do not
+"simplify" either one back.**
+
+1. `cumBasis` starts its loop at `weekPaidOn(ytdFrom) + 7`, **not**
+   `mondayOf(ytdFrom) + 7`. A slip dated 04/09 pays the week beginning 24/08,
+   not the week the paydate falls in. Using the paydate's own week skipped a
+   whole week of earnings out of the total. `weekPaidOn()` is the searched
+   inverse of `paydayOf()`, so bank-holiday shifts are handled.
+2. `weeks` is `taxWeekOf(paydayOf(k))`, **not** `taxWeekOf(k)`. HMRC counts tax
+   periods by payment date. The week beginning 24/08 is period 22 because it was
+   paid on 04/09 — the slip says so. Counting from the work week gave every week
+   one period too few, and one week's allowance too little with it.
+
+`ytd.js` pins both against the periods printed on the real slips.
+
+**How they were found is the lesson.** Both bugs survived a clean 36-suite run
+and a spot-check of the arithmetic. They only surfaced when a backup file had to
+be built against a specific real payslip, which forced the dates to be lined up
+against something external. Tests written from the same understanding as the
+code cannot catch a misunderstanding — only a real document can.
+
+Once a full tax year has been logged in the app, the row is never needed.
+
+### Student loans
+
+`settings.slPlan`, one of `""` / `plan1` / `plan2` / `plan4` / `pg`. `SL_PLANS`
+holds an annual threshold and a rate; the deduction is worked out on **NI-able**
+pay and **rounded down to whole pounds**, which is how payroll does it.
+
+Thresholds are 2026/27 figures and are hardcoded, not in config. They change
+annually — if a colleague's deduction reads wrong, check these first.
+
+### Medicash
+
+`settings.bikOn` (tick) alongside `settings.bik` (amount). Not everyone
+subscribes and the plan levels differ, so both are exposed, config only. With the
+tick off the benefit leaves the taxable figure entirely. It never touches NI-able
+pay either way.
+
+### The estimate marker
+
+A `.estb` bubble, below the figure and above its caption, centred on that
+figure's own column rather than on the screen. `.fig.two .f` is now
+`text-align:center` on both halves so each number, bubble and caption form their
+own centred stack.
+
+**Marked**: gross and take-home, everywhere they appear — week hero, week strip,
+both day-tab figures, both payslip-tab figures. Both go through calculations, and
+gross contains the pension, which the app works out from the banded formula.
+
+**Not marked**: night out, meal, expenses, attendance allowance. Flat amounts
+that Vit or his contract fixed. Nothing is labelled "exact" — unmarked means
+solid.
+
+The week hero uses a single permanent `#heroEst` element toggled by `heroNet()`,
+because building it into `fig.innerHTML` on every render stacked them up. The
+two-figure heroes build their own inside the figure markup. `render()` hides
+`#heroEst` first, and only `heroNet()` shows it again.
+
+### Why any of this is safe
+
+The carry-over ledger and the payroll dispute sheet compare **hours**, never
+computed pay. A wrong tax code cannot contaminate a dispute; it only moves a
+"roughly what lands Friday" figure. That separation is the reason a configurable
+tax code is acceptable at all, and it is stated in the config note so a new user
+does not assume the money is the check.
+
+### The gate
+
+Changing the tax code pops `TAX_WARN` and requires typing `understood`
+(case-insensitive, trimmed). Cancelling or typing anything else reverts the
+input. The warning states that real payroll recalculates the whole year weekly
+and this does not, that mid-year starts and K codes can be a long way out, and —
+shown to everyone, not conditionally — that filling in "Pay so far this tax year"
+gives the closest estimate.
+
+An invalid code is refused *before* the gate, with a plain message naming the
+forms it accepts.
