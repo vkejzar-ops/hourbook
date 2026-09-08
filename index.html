@@ -297,6 +297,15 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
 
 /* ---- payslip check ---- */
 .pl{padding:11px 0;border-bottom:1px solid var(--rule)}
+.more{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;min-height:var(--tap);background:none;border:0;
+  font:inherit;font-size:14px;color:var(--dim);
+}
+.more .cv{display:inline-block;transition:transform .18s}
+.more.open .cv{transform:rotate(180deg)}
+.rest{display:none}
+.rest.open{display:block}
 .pl .top{display:flex;align-items:baseline;gap:10px}
 .pl .nm{flex:1;font-size:14.5px}
 .pl .exp{font-size:12.5px;color:var(--dim)}
@@ -579,7 +588,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v20";
+const BUILD="v21";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -1589,6 +1598,12 @@ function renderPayslip(c){
   const d=load(), k=plCur(), p=plSaved(k), e=plExpected(k,c);
   const box=document.getElementById("plList");
   box.innerHTML="";
+  /* lines with nothing expected and nothing owed fold away — most weeks
+     that is holiday, Saturday, Sunday, bank holiday and SSP, all sitting
+     there empty. They render exactly as normal rows, just inside the fold. */
+  const hid=document.createElement("div");
+  hid.className="rest"; hid.id="plRest";
+  let hidN=0;
   const locked=plLocked(k);
   const carryIn=plCarryIn(k), carryOut=plStep(k,carryIn);
   box.className = locked ? "prov" : "";
@@ -1766,8 +1781,30 @@ function renderPayslip(c){
       const now = raw===null ? (e[key].units===1?1:0) : raw;
       commit(String(now?0:1));
     });
-    box.appendChild(row);
+
+    /* Night out and attendance stay out always — he checks those every week.
+       Everything else earns its place: something expected, something owed
+       either way, or a figure already typed in (a line he has touched must
+       never vanish under him). */
+    const expects = unit==="£" ? exp.cash>0 : exp.units>0;
+    const live = key==="nights" || key==="att" || expects || raw!==null
+              || owed>0 || cin.credit>0 || cout.owed>0 || cout.credit>0;
+    if(live) box.appendChild(row); else { hid.appendChild(row); hidN++; }
   });
+
+  if(hidN){
+    const btn=document.createElement("button");
+    btn.className="more"; btn.type="button";
+    const label=()=>{ btn.innerHTML=(hid.classList.contains("open")
+        ? "<span>hide</span>" : "<span>"+hidN+" other line"+(hidN>1?"s":"")+"</span>")
+        + "<span class=\"cv\">&#9662;</span>"; };
+    label();
+    btn.addEventListener("click",()=>{
+      hid.classList.toggle("open"); btn.classList.toggle("open"); label();
+    });
+    box.appendChild(btn);
+    box.appendChild(hid);
+  }
 
   /* totals — hours first, pounds underneath */
   const t=plTotals(k,c);

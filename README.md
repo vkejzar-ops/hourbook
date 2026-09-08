@@ -23,11 +23,11 @@ This file exists so a future conversation can pick the project up cold.
 
 ## Version discipline
 
-`const BUILD="v20"` in `index.html` and `const CACHE = "hourbook-v20"` in `sw.js`
+`const BUILD="v21"` in `index.html` and `const CACHE = "hourbook-v21"` in `sw.js`
 **must be bumped together on every change.** The test `build.js` fails if they
 drift. The build number is shown in More → Everything else.
 
-Current version: **v20**.
+Current version: **v21**.
 
 ---
 
@@ -320,7 +320,7 @@ finish-time handler; the gov.uk fetch does not.
 
 ## Tests
 
-28 suites in `/home/claude/t/`, all green as of v20. Run with `node <file>.js`.
+29 suites in `/home/claude/t/`, all green as of v21. Run with `node <file>.js`.
 
 `test.js` · `hol.js` · `new2.js` · `holui.js` · `dom.js` · `hdr.js` · `imp.js` ·
 `wipe.js` · `holpay.js` · `holui2.js` · `backup.js` · `bhseed.js` · `bhapi.js` ·
@@ -423,3 +423,53 @@ The three unpaid waiting days were **abolished on 6 April 2026** by the
 Employment Rights Act 2025, along with the Lower Earnings Limit test. SSP is
 payable from the first qualifying day. Do not reintroduce a waiting-day
 assumption.
+
+
+## Folding the dead payslip lines (v21)
+
+There are nine payslip lines and in a normal week only three are alive: basic
+hours, night out, attendance allowance. Holiday, standard OT, Saturday, Sunday,
+bank holiday worked and SSP all sit there empty. So they fold away behind one
+row at the bottom of the list — "6 other lines" with an arrow.
+
+A line earns its place in the main list if **any** of these hold:
+
+- it is night out or attendance — those are checked every week regardless
+- something is expected on it this week (hours logged, or cash for SSP)
+- something is owed or credited on it, either carried in or going out
+- a figure has already been typed into it
+
+That last one matters: a line he has touched must never vanish under him. It
+also means the fold cannot hide a discrepancy he has recorded.
+
+The consequence is that lines announce themselves. Standard OT expects nothing
+until the week passes fifty hours, so it appears on its own the week it starts
+to matter. Saturday appears the week he works one. Nothing had to be
+special-cased for either.
+
+The folded rows are ordinary rows — same markup, same inputs, same carry-over
+strips. Nothing is stripped down; they are simply inside a container with
+`display:none` until tapped.
+
+The fold does **not** remember being open. Every render starts folded, by
+design: if a figure is typed into a folded line, that line moves up into the
+main list on the next render, so the thing worth seeing is out in the open
+rather than depending on the fold having been left open.
+
+### Why there is no auto-reveal on a mismatch
+
+An earlier proposal was to force a hidden line back into view when the slip's
+gross failed to reconcile. It cannot be done: the app never captures a gross
+figure from the slip. Every gross in the app is computed from logged hours, so
+there is nothing independent to reconcile against.
+
+Covered by `fold.js` (34 checks).
+
+## Fixture note: att.js and the clock
+
+`att.js` used to seed only Monday and assert that nothing had been missed yet.
+That only held when the suite was run on a Monday — from Tuesday onward the
+elapsed weekday with no hours is a genuinely missed day and the allowance is
+correctly reported as lost. It now seeds every weekday from Monday up to
+today. Worth checking for the same assumption in any new fixture built on
+`cur()`.
