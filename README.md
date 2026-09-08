@@ -473,3 +473,77 @@ elapsed weekday with no hours is a genuinely missed day and the allowance is
 correctly reported as lost. It now seeds every weekday from Monday up to
 today. Worth checking for the same assumption in any new fixture built on
 `cur()`.
+
+
+## Expenses (v21)
+
+Parking, showers, anything he pays for and claims back.
+
+Stored on the day as `r.exp`, an array of `{a, d, p}` — `a` is **whole pence**
+(an integer, so nothing rounds), `d` is the free-text description, `p` is the
+parking flag. Ticking parking greys the description box out and shows
+"parking"; unticking gives back whatever he had typed, because `d` is kept
+either way.
+
+### Typing the amount
+
+Digits fill from the right, the way a card machine takes an amount. `1250`
+reads as £12.50 while you type, and the box always shows the real amount, so
+there is no decimal point to hunt for on a numeric keypad and no guessing at
+the end whether two digits meant pounds or pence. `penceFrom()` reads the
+digits, `penceText()` formats them. The cost is that round amounts take four
+taps: ten pounds is `1000`.
+
+An earlier design decided on confirm — one or two digits meant whole pounds,
+three or more meant pence. That was dropped because it cannot coexist with
+live formatting: you would watch the box say £0.12 and then see it jump.
+
+A row whose amount is £0.00 with no description is dropped when he taps away.
+A row he has *just* added survives, since it is empty by definition — that is
+what the `keepBlank` argument to `setExp()` is for.
+
+### Where it shows
+
+- **Day tab** — a full-width block under the night out / holiday / sick chips.
+  Amount, parking chip, description on one line, `+ add another` underneath.
+- **Week list** — an amber money pill on the day-name line. Night out became a
+  grey pill at the same time, replacing the old "· night out" text, so the
+  times line stays the times line however much is on the day.
+- **Payslip check** — an `exp` line, unit `£`. It folds away when nothing is
+  claimed (the existing `expects` rule handles this for free) and opens to the
+  itemised list, so a short payment can be traced to the missing receipt.
+
+### The money
+
+Expenses are **money back, not earnings**. They go into gross and into
+take-home **in full** — he really does bank them — but they are not taxed, not
+NI-able and not pensionable, so they come straight back out of `taxable`
+alongside the night out and the meal. The visible pair of figures therefore
+stays honest to his bank account; only the narrower gross-for-tax figure
+underneath drives tax and NI, and that is never displayed.
+
+`exp` is in `PL_CARRY`, so an unpaid expense carries forward in pounds like
+attendance does.
+
+## The dispute export (v21)
+
+The day CSV is unchanged apart from gaining an `Expenses` column — it stays the
+raw record. Alongside it there is now **"Download what is still owed"**, which
+is the sheet to send to payroll: only what is outstanding *right now*, one row
+per line, with how much, what it is worth, and the week it should have been
+paid. Built from `outstanding()`, which reads `plCarryIn()` for the week after
+the last paid one — the same ledger the payslip tab uses — so written-off lines
+are already absent. With nothing outstanding it says so rather than downloading
+an empty file.
+
+## Bug fixed in v21 — write-offs on the current slip
+
+`plStep()` applied a write-off only to what was carried **in** to that week. A
+shortfall that arose on the slip he was looking at could therefore be written
+off, the flag stored, and nothing would happen: the strip stayed on screen and
+the debt still rolled into the next week. It only ever worked on a debt
+inherited from an earlier week.
+
+The write-off is now applied on the way out as well. This mattered beyond the
+UI annoyance — without it the payroll sheet would have listed amounts he had
+already dismissed. Covered by `exp2.js`.
