@@ -365,7 +365,7 @@ finish-time handler; the gov.uk fetch does not.
 
 ## Tests
 
-42 suites in `/home/claude/t/`, 974 checks, all green as of v23. Run with
+46 suites in `/home/claude/t/`, 1111 checks, all green as of v25. Run with
 `node <file>.js`. (`dom.js` is the bootstrap and prints no count of its own.)
 
 `test.js` · `hol.js` · `new2.js` · `holui.js` · `dom.js` · `hdr.js` · `imp.js` ·
@@ -373,7 +373,7 @@ finish-time handler; the gov.uk fetch does not.
 `dur.js` · `mig.js` · `pay2.js` · `ui3.js` · `ui4.js` · `gap.js` · `build.js` ·
 `att.js` · `attday.js` · `lock.js` · `bkp2.js` · `carry.js` · `carryui.js` ·
 `sick.js` · `window.js` · `exp.js` · `exp2.js` · `fold.js` · `tax.js` ·
-`ytd.js` · `slips.js` · `ui5.js` · `bkp3.js` · `imp2.js` · `roll.js` · `intro.js` · `hero.js` · `ahead.js` · `tick.js`
+`ytd.js` · `slips.js` · `ui5.js` · `bkp3.js` · `imp2.js` · `roll.js` · `intro.js` · `hero.js` · `ahead.js` · `tick.js` · `split.js` · `pback.js` · `item.js` · `pick.js`
 
 Other `.js` files in that directory are scratch and can be ignored.
 
@@ -740,6 +740,142 @@ week that has not been paid.
 There are no tax or NI rows on this tab — both are display-only — so the
 question of offering a tick on an estimated figure does not arise.
 `tick.js`, 45 checks.
+
+## What v25 changed
+
+### The unpaid receipt is pinned to the receipt, not to a number
+
+Before, a short expenses line left a debt of "£12.50 owed from 24 Aug". Now the
+debt remembers *which receipt* it was, so the week it finally comes through the
+strip says "that was Mon Parking £12.50 from 24 Aug — finally paid" instead of
+announcing that he is twelve pounds fifty up.
+
+Each receipt gets a key of `<date>#<position in that day>`, stable across
+renders, stored on `expItems`. `expRefOf(week, items, shortPence)` decides which
+one the debt belongs to: a pick he made by hand wins, and failing that an
+unambiguous single-receipt match stands in — so the ordinary case needs no tap
+at all and nothing is written to storage for it. The reference rides on the
+carry ledger as `ref` beside `owed`, `from` and `credit`, is set only when a
+*fresh* debt appears (`prevOwed===0`), and is cleared by a write-off. A later
+week also being short does not re-point an existing debt at one of that week's
+receipts.
+
+The picker is the existing receipt list, which now opens by itself whenever the
+line is short and stays folded when it matches. When it is short the rows become
+buttons; tapping one marks it with an amber dot and the words "unpaid, carried
+over", and tapping it again clears the pick. Amber, not green — green reads as
+"paid" to everyone. The pick is stored as `weeks[k].expRef`.
+
+When no combination of receipts fits the gap at all, it used to go silent. Now
+it says so and lists them: "Nothing in your receipts comes to the £12.00 short.
+They are all listed below — worth checking them off against the slip."
+
+The 16-receipt cap on `expMissing` stays. Above that the subset search gets
+expensive, and with that many receipts some subset fits any gap by coincidence,
+so the answer stops meaning anything. One or two a week is the real case.
+
+`pick.js`, 44 checks (also covers the label below).
+
+### "to be paid" before payday, "paid" after
+
+The middle block of the three under the hero said "paid" on a week that had not
+been paid yet. It now reads "to be paid" until that week's payday has passed.
+Payday is the trigger, not him checking the slip off — otherwise a week he never
+got round to checking would say "to be paid" for ever, and this way it flips on
+its own. It uses `plLocked(cur())`, the same test that locks the payslip tab and
+switches predicted/expected.
+
+## What v24 changed
+
+### Split daily rest
+
+A tick sits between the clock-in and clock-out boxes, labelled "split rest".
+Set it and that day's following rest stops counting as one of the three
+reductions.
+
+The reason it is needed: the app holds one shift per calendar day, so a day
+that is really two shifts with three hours of rest between them is flattened
+into one long block. The nine hours that follows then reads as a reduction when
+it is actually the second part of a regular 3+9 split. The tick tells the app
+what the flattened record cannot.
+
+The proper fix is two shifts on one day, which would also correct the hours
+totals. That was considered and dropped as too large; for pay the day is one
+day's money either way.
+
+`restInfo()` now reports `prev` and `split`; `restKind()` returns a new `split`
+kind. A split will NOT rescue a rest genuinely under nine hours — that is still
+`short`. `split.js`, 28 checks.
+
+### Getting back to today
+
+The date between the arrows always was a button that jumps back; nobody could
+tell. It now has a border like every other control, and goes green when you are
+on today (day tab), this week (week tab) or the last paid week (payslip). Tap it
+when it is not green to return; tapping a green one does nothing.
+
+### Take-home everywhere
+
+"After tax" is gone. Both day-tab heroes are take-home figures now — today's and
+a running week total. Today's is its gross scaled by the week's own net-to-gross
+ratio; going at it as `c.net - cx.net` would dump the whole £50 attendance
+allowance onto whichever day happened to finish the week.
+
+The payslip tab drops to a single hero, expected take home, with the
+predicted/expected wording moved into the caption.
+
+### The payslip reckoning
+
+`#plTot` is now a full itemised block: every line, then Before tax, Pension,
+Tax, National Insurance, Student loan (when there is one) and Take home, in
+three columns — logged, slip, difference.
+
+`plMoney(k, byKey, cum)` runs the same chain `calc()` does but fed from a set of
+per-line amounts, so it can run twice. That is what makes the difference column
+meaningful on deduction rows: underpay a line and the tax falls with it, so the
+take-home gap is smaller than the gross gap. Tax and NI carry the estimate
+marker.
+
+### Which receipt is missing
+
+`expMissing(items, shortPence)` tries every subset of the week's expenses
+against the shortfall. One answer names the receipt; several say "could be any
+of them" and list them; none says nothing. Pence integers, so the comparison is
+exact. Capped at 16 items and 8 matching sets.
+
+### Two grace bands, overtime only
+
+`owedRound` (0.25h) and `owedThresh` (1h), both exposed in config. Under the
+first it is rounding and is dropped silently. Between them it is not carried but
+IS said out loud on the row, because dropping it silently means he never learns
+it happened. Above, it carries.
+
+Both apply to **standard overtime only** — that is the only line that gets
+quarter-rounded. Saturdays, bank holidays, holiday and basic carry from the
+first penny, because those are whole shifts at a fixed rate and short means
+something is actually wrong.
+
+### The weekly rest payback clears itself
+
+`weeklyPayback(k)` looks for the compensating rest in the three weeks following
+rather than asking for a tick.
+
+**A judgement call worth knowing about.** The regulation says the compensation
+attaches to a rest of at least nine hours. Read literally, `owed + 9h` clears
+it — but then any ordinary weekend clears any debt, which is worse than useless:
+it would say he was covered when he was not. So the test here is the strict one,
+a single break of a full 45 hours plus what is owed. That can say he still owes
+when he does not, which is the safe way round for something he may have to stand
+behind at a roadside check. `pback.js`, 15 checks, including the boundary to the
+minute.
+
+### A fixture hazard fixed across the board
+
+Thirty-six suites were reading `/mnt/user-data/outputs/index.html` — the shipped
+file — rather than `/home/claude/work.html`. They passed all session while
+silently testing the previous build, and only failed once the new file was
+copied over. Every suite now reads `process.env.HB || '/home/claude/work.html'`.
+Copy to outputs only after green.
 
 ## Tax codes, student loans and the estimate marker (v22 design, still current)
 

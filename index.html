@@ -52,10 +52,16 @@ header{
 }
 .weeknav .arrow:active{background:var(--panel-2)}
 .weeknav .weeklabel{
-  flex:1 1 auto;min-width:0;width:auto;border:0;background:none;
+  flex:1 1 auto;min-width:0;width:auto;background:none;
   display:flex;flex-direction:column;justify-content:center;
-  text-align:center;padding:4px 2px;min-height:44px;overflow:visible;
+  text-align:center;padding:4px 6px;min-height:44px;overflow:visible;
+  border:1px solid var(--rule);border-radius:12px;
 }
+/* green while you are on today, so wandering off is visible at a glance
+   rather than something you work out from the date. it is also the way back:
+   tapping it returns to today, and does nothing when it is already green. */
+.weeknav .weeklabel.here{border-color:var(--green)}
+.weeknav .weeklabel.here .r2{color:var(--green)}
 .weeknav .weeklabel .r1{
   font-size:16px;font-weight:600;line-height:1.2;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -168,6 +174,12 @@ main{padding:0 16px 30px}
 .eitem{font-size:13px;color:var(--dim);padding:3px 0 3px 12px;border-left:2px solid var(--rule);
   margin-left:2px;display:flex;gap:10px}
 .eitem span:last-child{margin-left:auto}
+.eitem{align-items:flex-start}
+button.eitem{width:100%;background:none;border:0;border-left:2px solid var(--rule);
+  font:inherit;font-size:13px;color:var(--dim);text-align:left;cursor:pointer;
+  -webkit-appearance:none;appearance:none;border-radius:0}
+button.eitem.pick,.eitem.pick{border-left-color:var(--amber)}
+.upc{display:block;font-style:normal;font-size:12px;color:var(--amber);margin-top:2px}
 .extra{display:flex;gap:8px;margin-top:9px;align-items:center;flex-wrap:wrap}
 .extra label{font-size:13px;color:var(--dim)}
 .extra input.num{
@@ -188,6 +200,20 @@ main{padding:0 16px 30px}
 .lrow.tot{border-bottom:none;border-top:2px solid #C7BEAC;margin-top:2px;padding-top:10px;font-weight:600}
 .lrow.tot .d{color:var(--text)}
 .lrow.neg .c{color:var(--red)}
+/* the payslip reckoning carries a third column, so its rows are tighter and
+   the deduction rows are not painted red — a pension line is not a problem,
+   and red here is reserved for a real difference. */
+#plTot .lrow{gap:6px;font-size:13.5px}
+#plTot .lrow .d{flex:1;min-width:0}
+#plTot .lrow .u,#plTot .lrow .c{width:62px;text-align:right;font-size:13px;color:var(--dim)}
+#plTot .lrow .c{color:var(--text)}
+#plTot .lrow .g{width:58px;text-align:right;font-size:13px}
+#plTot .lrow.hd .d,#plTot .lrow.hd .u,#plTot .lrow.hd .c,#plTot .lrow.hd .g{color:var(--dim);font-size:12px}
+#plTot .lrow.neg .c{color:var(--text)}
+#plTot .lrow.tot .d{color:var(--text)}
+.note.graced{color:var(--amber);margin-top:4px}
+.note.exmiss{margin-top:4px}
+.estb.sm{display:inline;margin:0 0 0 5px;padding:1px 5px;font-size:9.5px;vertical-align:middle}
 
 /* ---- generic field ---- */
 .field{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--rule)}
@@ -260,7 +286,16 @@ nav button.on .g{opacity:1}
 .bigtimes .dash{color:var(--dim);font-size:13px}
 .tlabels{display:flex;gap:10px;font-size:12.5px;color:var(--dim);margin-bottom:2px}
 .tlabels span{flex:1;text-align:center}
-.tlabels i{width:26px;flex:none}
+.tlabels i{width:46px;flex:none;font-style:normal;text-align:center;font-size:10.5px;line-height:1.15}
+.tlabels i.on{color:var(--green)}
+/* the split-rest tick sits where the "to" used to, because the three hours it
+   records happened between clocking off and clocking on again. */
+.bigtimes .spl{
+  flex:none;width:46px;height:34px;padding:0;font-size:15px;cursor:pointer;
+  border:1px dashed var(--rule);border-radius:9px;
+  background:transparent;color:var(--dim);opacity:.55;
+}
+.bigtimes .spl.on{border-style:solid;background:var(--green);border-color:var(--green);color:#FFF;opacity:1}
 
 .durs{padding:10px 0 12px;border-bottom:1px solid var(--rule)}
 .dbox{display:flex;align-items:center;gap:10px;margin:2px 0 0}
@@ -680,6 +715,7 @@ const DEFAULTS = {
   holHours:10,
   sickRate:"",
   owedThresh:1,
+  owedRound:0.25,
   backupWeeks:2,
   pensionRate:5, pensionLower:120.00, pensionUpper:967.00,
   bik:1.15, bikOn:1,
@@ -689,7 +725,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v23";
+const BUILD="v25";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -876,7 +912,7 @@ function restInfo(ds){
     const ps=startMs(p,pr);
     let inWin=gap;
     if(ps!==null) inWin=Math.max(0,Math.round((Math.min(st,ps+24*3600000)-en)/60000));
-    return { gap, inWin, capped: inWin<gap };
+    return { gap, inWin, capped: inWin<gap, prev:p, split: !!pr.split };
   }
   return null;
 }
@@ -890,6 +926,10 @@ function restKind(x){
   const win = typeof x==="number" ? x : (x.inWin==null?x.gap:x.inWin);
   if(gap>=24*60) return "weekly";
   if(win>=11*60) return "regular";
+  /* a shift marked as a split rest took its first three hours before the
+     clock-out this gap is measured from, so what is left here is the nine-hour
+     second part of a regular rest, not a reduction. */
+  if(typeof x!=="number" && x.split && win>=9*60) return "split";
   if(win>=9*60)  return "reduced";
   return "short";
 }
@@ -897,6 +937,7 @@ const REST_TEXT={
   none:["—","","Type a start time and this fills itself in from when you finished last."],
   weekly:["","ok","More than 24 hours — that is a weekly rest, not a daily one."],
   regular:["","ok","A full daily rest. Nothing used up."],
+  split:["","ok","A split daily rest — you marked three hours taken during the last shift, and this is the nine that follows. It counts as a full rest, so nothing is used up."],
   reduced:["","warn","A reduced daily rest. Allowed three times between weekly rests, and nothing to pay back."],
   short:["","over","Under 9 hours. That is not a legal daily rest — check it against your tacho."],
   reducedCut:["","warn","A reduced daily rest. The last shift ran long enough that only part of this break falls inside the 24 hours from when it started, so it counts as reduced however long you actually rested. Three allowed between weekly rests."],
@@ -907,6 +948,28 @@ function restTextKey(info){
   const k=restKind(info);
   return (info&&info.capped&&(k==="reduced"||k==="short")) ? k+"Cut" : k;
 }
+
+/* a reduced weekly rest has to be paid back en bloc, attached to another rest,
+   by the end of the third week following. rather than asking him to tick that
+   off, look for it in his start and finish times.
+   The regulation says the compensation attaches to a rest of at least 9 hours,
+   but read that literally and any ordinary weekend clears any debt, which is
+   worse than useless — it would tell him he was covered when he was not. So
+   the test here is the strict one: a single break of a full 45 hours plus what
+   is owed. That can say he still owes when he does not, which is the safe way
+   round for something he may have to stand behind at a roadside check. */
+function weeklyPayback(k){
+  const taken=weeklyRestOf(k);
+  if(!(taken>=24*60 && taken<45*60)) return null;
+  const owed=45*60-taken, need=45*60+owed, by=addDays(k,27);
+  for(let i=7;i<=27;i++){
+    const day=addDays(k,i);
+    const m=restInfo(day);
+    if(m && m.gap>=need) return {owed, by, paid:true, on:day, block:m.gap};
+  }
+  return {owed, by, paid:false};
+}
+
 
 /* how many reduced daily rests have been used since the last weekly rest,
    counting backwards from and including the given day */
@@ -938,7 +1001,7 @@ function reducedSinceWeekly(ds){
     const day=addDays(ds,-i);
     if(endMs(day,d.days[day]||{})===null) continue;
     const o=openRestInfo(day);
-    if(o && o.kind==="reduced") n++;
+    if(o && o.kind==="reduced" && !(d.days[day]||{}).split) n++;
     break;                                 // only the most recent shift
   }
   for(let i=0;i<30;i++){
@@ -1036,9 +1099,12 @@ function calc(monKey, skip){
        below: a sick weekday still counts as a day missed. */
     const onSick = i<5 && !!r.sick && mins===0 && !BH.has(ds);
     if(onSick) sickDays++;
-    expOf(r).forEach(x=>{
+    /* the ordinal within the day gives each receipt a key that survives a
+       re-render, so a carried-over shortfall can be pinned to the receipt
+       itself rather than to a bare amount. */
+    expOf(r).forEach((x,n)=>{
       const a=Number(x.a)||0; if(!a) return;
-      expP+=a; expItems.push({ds, i, pence:a, label:expLabel(x)});
+      expP+=a; expItems.push({ds, i, n, key:ds+"#"+n, pence:a, label:expLabel(x)});
     });
     workedMins+=mins;
     if(r.night) nights++;
@@ -1075,7 +1141,7 @@ function calc(monKey, skip){
     if(k==="short") shortRest++;
     /* a shift with nothing after it yet, already settled by its own length */
     const orq=openRestInfo(ds);
-    if(orq && orq.kind==="reduced") redRest++;
+    if(orq && orq.kind==="reduced" && !(d.days[ds]||{}).split) redRest++;
     if(orq && orq.kind==="short") shortRest++;
   });
 
@@ -1175,7 +1241,67 @@ function calc(monKey, skip){
   };
 }
 
-/* ============ payslip check ============ */
+/* which receipts add up to the money missing from the expenses line. every
+   subset is tried, so an exact answer is named and an ambiguous one is not
+   guessed at — two £12 claims and £12 short can only ever be "one of these".
+   items are pence integers, so the comparison is exact. */
+function expMissing(items, shortPence){
+  if(shortPence<=0 || !items.length || items.length>16) return null;
+  const hits=[];
+  for(let m=1; m<(1<<items.length); m++){
+    let sum=0;
+    for(let i=0;i<items.length;i++) if(m&(1<<i)) sum+=items[i].pence;
+    if(sum===shortPence) hits.push(m);
+    if(hits.length>8) break;
+  }
+  if(!hits.length) return null;
+  const named=new Set();
+  hits.forEach(m=>{ for(let i=0;i<items.length;i++) if(m&(1<<i)) named.add(i); });
+  return { exact: hits.length===1, sets: hits.length,
+           items: [...named].map(i=>items[i]) };
+}
+
+/* which receipt a carried-over expense shortfall belongs to. a pick he made by
+   hand wins; failing that, an unambiguous single-receipt match stands in, so
+   the ordinary case needs no tap at all. pinning the debt to the receipt
+   rather than to a bare amount is what lets a later slip say which one finally
+   came through, instead of just announcing he is twelve pounds fifty up. */
+function expRefOb(x){ return {key:x.key, i:x.i, pence:x.pence, label:x.label}; }
+function expRefText(r){ return SHORTDAY[r.i]+" "+(r.label||"no description")+" "+penceText(r.pence); }
+function expRefOf(w, items, shortP){
+  items=items||[];
+  const wk=load().weeks[w]||{};
+  if(wk.expRef){ const m=items.find(x=>x.key===wk.expRef); if(m) return expRefOb(m); }
+  const hit=expMissing(items, shortP);
+  if(hit && hit.exact && hit.items.length===1) return expRefOb(hit.items[0]);
+  return null;
+}
+
+
+/* the same money chain calc() runs, but fed from a set of per-line amounts, so
+   it can be run twice — once on what was logged and once on what the slip
+   actually paid. that is what makes a difference column meaningful on the
+   deduction rows: underpay a line and the tax drops with it, so the gap in
+   take-home is smaller than the gap in gross. */
+const PL_PENSIONABLE=["basic","hol","ot","sat","sun","bhw","ssp"];
+function plMoney(k, byKey, cum){
+  const pensionable=PL_PENSIONABLE.reduce((a,x)=>a+(byKey[x]||0),0);
+  const qual=Math.max(0,Math.min(pensionable,S("pensionUpper"))-S("pensionLower"));
+  const pension=r2(qual*S("pensionRate")/100);
+  const nightMeal=byKey.nights||0, expenses=byKey.exp||0, att=byKey.att||0;
+  const beforePension=pensionable+nightMeal+att+expenses;
+  const cash=beforePension-pension;
+  const bik=S("bikOn")?S("bik"):0;
+  const taxable=cash+bik-nightMeal-expenses;
+  const niable=taxable-bik;
+  const tax=cum?taxFor(k,taxable):taxWeekly(taxable);
+  const sloan=studentLoan(niable);
+  const niMain=Math.max(0,Math.min(niable,S("niUpper"))-S("niFree"))*S("niRate")/100;
+  const niUp=Math.max(0,niable-S("niUpper"))*S("niRate2")/100;
+  return {beforePension, pension, cash, taxable, tax, ni:r2(niMain+niUp), sloan,
+          net:cash-tax-r2(niMain+niUp)-sloan};
+}
+
 /* hours-first: for the paid lines he types HOURS, never pounds.
    tax, NI and pension are not compared — they cannot be worked out exactly. */
 const PL_LINES=[
@@ -1269,9 +1395,15 @@ const PL_BACK  = 52;
    a stray 0.25 is arithmetic, not a shortfall. it is meaningless on the
    count lines: a missing night out is a whole £30 and can never be rounding,
    so nights and attendance carry any gap at all. */
-function plThresh(unit){ return unit==="h" ? S("owedThresh") : 0; }
+/* the grace bands are about rounding, and the only line that gets rounded is
+   standard overtime — it is quartered. Saturdays and bank holidays are whole
+   shifts at a fixed rate, so short there means something is actually wrong and
+   it carries straight away. below owedRound it is rounding and is dropped
+   silently; between the two it is still not carried, but it is worth a look. */
+function plThresh(unit,key){ return key==="ot" ? S("owedThresh") : 0; }
+function plRound(key){ return key==="ot" ? S("owedRound") : 0; }
 
-function plBlank(){ return {owed:0, from:null, credit:0}; }
+function plBlank(){ return {owed:0, from:null, credit:0, ref:null}; }
 
 /* walking every week back a year would mean a year of calc() calls on every
    render. nothing can be owed before the first week he ever entered a slip
@@ -1304,24 +1436,25 @@ function plStep(w,inSt){
   /* an unpaid week carries no slip, so it says nothing about a debt. it
      passes shortfalls through untouched and lets any credit lapse. */
   const locked=plLocked(w);
-  const e = locked ? null : plExpected(w,calc(w));
+  const cw = locked ? null : calc(w);
+  const e = locked ? null : plExpected(w,cw);
 
   PL_LINES.forEach(([key,label,unit,rateKey])=>{
     if(PL_CARRY.indexOf(key)<0) return;
     const inn = inSt[key] || plBlank();
-    let owed = inn.owed, from = inn.from;
+    let owed = inn.owed, from = inn.from, ref = inn.ref || null;
     const credit = inn.credit;
 
     /* a write-off wipes whatever was outstanding as at this week */
-    if(wo[key]){ owed=0; from=null; }
+    if(wo[key]){ owed=0; from=null; ref=null; }
     if(locked){
-      if(owed>0) out[key]={owed, from, credit:0};
+      if(owed>0) out[key]={owed, from, credit:0, ref};
       return;
     }
 
     const prevOwed=owed;
-    const thresh=plThresh(unit);
-    let cred=0;
+    const thresh=plThresh(unit,key);
+    let cred=0, graced=0;
 
     if(unit==="yn"){
       /* attendance is one a week, £50, so a missed one can never come back
@@ -1339,7 +1472,7 @@ function plStep(w,inSt){
       const raw = num(p[key]);
       let val = raw;
       if(unit==="n" && raw===null && chk.nights) val=target;   /* ticked = checked and agrees */
-      if(val===null){ if(owed>0) out[key]={owed,from,credit:0}; return; }
+      if(val===null){ if(owed>0) out[key]={owed,from,credit:0,ref}; return; }
 
       const diff = val - target;
       if(diff>=0){
@@ -1348,18 +1481,27 @@ function plStep(w,inSt){
       }else{
         let short=-diff;
         if(credit>0) short=Math.max(0,short-credit);   /* them taking last week's overpayment back */
+        if(short>=plRound(key) && short<thresh) graced=short;
         if(short<thresh) short=0;
         if(short>0 && prevOwed===0) from=w;
         owed=short;
         if(owed===0) from=null;
+        /* only a fresh shortfall gets a receipt attached. once a debt is
+           running, the receipt that started it travels with it — a later week
+           being short as well does not re-point it at one of that week's
+           receipts. */
+        if(key==="exp"){
+          if(owed===0) ref=null;
+          else if(prevOwed===0) ref=expRefOf(w, cw.expItems, Math.round(short*100));
+        }
       }
     }
     /* the write-off has to apply on the way OUT as well as on the way in.
        a shortfall he dismisses on the same slip it appeared on was only
        being cleared from what was carried IN — which is nothing — so the
        strip stayed put and the debt rolled on regardless. */
-    if(wo[key]){ owed=0; from=null; }
-    if(owed>0 || cred>0) out[key]={owed, from, credit:cred};
+    if(wo[key]){ owed=0; from=null; graced=0; ref=null; }
+    if(owed>0 || cred>0 || graced>0) out[key]={owed, from, credit:cred, graced, ref};
   });
   return out;
 }
@@ -1573,6 +1715,16 @@ function render(){
     U.textContent=paydayLabel(cur());
   }
 
+  /* green while you are where the app opens: today on the day tab, this week
+     on the week tab. history has nowhere to be, so it never lights up. */
+  const TB=document.getElementById("todayBtn");
+  const here = tab==="day"     ? curDay===iso(new Date())
+             : tab==="week"    ? cur()===mondayOf(iso(new Date()))
+             : tab==="pay"     ? plCur()===lastPaidWeek()
+             : false;
+  TB.classList.toggle("here", here);
+  TB.style.visibility = tab==="history" ? "hidden" : "visible";
+
   /* arrows: none on history. forward stops at the last payday on the payslip
      tab, and at the end of next week on the day and week tabs. */
   const P=document.getElementById("prev"), N=document.getElementById("next");
@@ -1596,15 +1748,21 @@ function render(){
        whichever day happens to complete the week swallows the whole £50. */
     const cx=calc(cur(),curDay);
     const dayGross = c.hasData ? (c.beforePension-c.attPay)-(cx.beforePension-cx.attPay) : null;
+    /* today's own take-home is its gross scaled by the week's own net-to-gross
+       ratio. going at it the other way — c.net minus cx.net — would dump the
+       whole £50 attendance allowance onto whichever day happened to finish the
+       week, which is the same trap the gross figure above already sidesteps. */
+    const dayNet = dayGross===null||!c.beforePension ? null
+                 : dayGross * (c.net/c.beforePension);
     const dayLogged = mins>0 || (BH.has(curDay)&&dowIndex(curDay)<5) || !!r.hol || !!r.sick || !!r.night;
     fig.className="fig two";
     fig.innerHTML=
-      "<span class=\"f\"><span class=\"n\">"+(dayLogged&&dayGross!==null?money2(dayGross):"\u2014")+"</span>"+
-        (dayLogged&&dayGross!==null?"<span class=\"estb\">estimate</span>":"")+
-        "<span class=\"lbl\">today before tax</span></span>"+
+      "<span class=\"f\"><span class=\"n\">"+(dayLogged&&dayNet!==null?money2(dayNet):"\u2014")+"</span>"+
+        (dayLogged&&dayNet!==null?"<span class=\"estb\">estimate</span>":"")+
+        "<span class=\"lbl\">today's take home</span></span>"+
       "<span class=\"f r\"><span class=\"n\">"+(c.hasData?money2(c.net):"\u2014")+"</span>"+
         (c.hasData?"<span class=\"estb\">estimate</span>":"")+
-        "<span class=\"lbl\">week after tax</span></span>";
+        "<span class=\"lbl\">week's take home</span></span>";
     sub.textContent = c.hasData ? "" : "nothing logged this week yet";
     sub.style.display = sub.textContent ? "" : "none";
     strip.innerHTML="";
@@ -1613,15 +1771,11 @@ function render(){
     const gap=t.slipPay-t.expPay, gh=t.slipH-t.expH;
     /* an unpaid week has no slip to be "expected" against — say predicted */
     const pw=plLocked(plCur())?"predicted":"expected";
-    fig.className="fig two";
-    fig.innerHTML=
-      "<span class=\"f\"><span class=\"n\">"+money2(t.expPay)+"</span>"+
-        "<span class=\"estb\">estimate</span>"+
-        "<span class=\"lbl\">"+pw+" before tax</span></span>"+
-      "<span class=\"f r\"><span class=\"n\">"+money2(pc.net)+"</span>"+
-        "<span class=\"estb\">estimate</span>"+
-        "<span class=\"lbl\">"+pw+" after tax</span></span>";
-    sub.textContent = !plHasAny(plCur()) ? ""
+    fig.className="fig one";
+    fig.innerHTML="<span class=\"n\">"+money2(pc.net)+"</span>";
+    const pEst=document.getElementById("heroEst");
+    if(pEst){ pEst.style.display=""; pEst.textContent="estimate"; }
+    sub.textContent = !plHasAny(plCur()) ? pw+" take home"
       : Math.abs(gap)<0.01 ? "the slip matches"
       : "£"+Math.abs(gap).toFixed(2)+" "+(gap<0?"short":"over")+" on the slip"+
         (plGapSource(plCur(),pc) ? " · "+plGapSource(plCur(),pc) : "");
@@ -1647,7 +1801,10 @@ function render(){
     heroNet(fig,sub,c);
     strip.innerHTML=
       "<span class=\"s\"><span class=\"v\">"+hm(c.workedMins)+"</span><span class=\"k\">worked</span></span>"+
-      "<span class=\"s\"><span class=\"v\">"+hm(c.paidMins)+"</span><span class=\"k\">paid</span></span>"+
+      /* a week that has not reached its payday has not been paid, whatever the
+         figure says — and payday is the trigger rather than him checking the
+         slip off, so it flips on its own. */
+      "<span class=\"s\"><span class=\"v\">"+hm(c.paidMins)+"</span><span class=\"k\">"+(plLocked(cur())?"to be paid":"paid")+"</span></span>"+
       "<span class=\"s\"><span class=\"v\">"+money2(c.cash)+"</span><span class=\"estb\">estimate</span><span class=\"k\">gross</span></span>";
   }
 
@@ -1748,10 +1905,10 @@ function renderDay(c){
 
     <div class="bigtimes">
       <input class="st" inputmode="numeric" maxlength="4" placeholder="0000" value="${r.start||""}" aria-label="Start">
-      <span class="dash">to</span>
+      <button class="spl${r.split?" on":""}" aria-label="Split rest" aria-pressed="${r.split?"true":"false"}">&#10003;</button>
       <input class="fi" inputmode="numeric" maxlength="4" placeholder="0000" value="${r.end||""}" aria-label="Finish">
     </div>
-    <div class="tlabels"><span>start</span><i></i><span>finish</span></div>
+    <div class="tlabels"><span>start</span><i class="${r.split?"on":""}">split rest</i><span>finish</span></div>
 
 
     <div class="durs">
@@ -1846,6 +2003,8 @@ function renderDay(c){
   });
   st.addEventListener("input",e=>{ if(e.target.value.length===4) fi.focus(); });
   box.querySelector(".nt").addEventListener("click",()=>set("night",r.night?"":true));
+  const splBtn=box.querySelector(".spl");
+  if(splBtn) splBtn.addEventListener("click",()=>set("split",r.split?"":true));
   const holBtn=box.querySelector(".hol");
   if(holBtn) holBtn.addEventListener("click",()=>set("hol",r.hol?"":true));
   const skBtn=box.querySelector(".sk");
@@ -2002,9 +2161,13 @@ function renderHours(c){
     wrNote="A full weekly rest, worked out from your finish and start times.";
   }else if(wrMins>=24*60){
     wrVal=hm(wrMins); wrCls=isRed(pwrMins)?"over":"warn";
+    const pb=weeklyPayback(cur());
     wrNote=isRed(pwrMins)
       ? "Reduced two weeks running — that is not allowed. Check it against your tacho."
-      : hm(45*60-wrMins)+" owed back, in one block attached to a rest of 9 hours or more, by the end of "+shortDate(addDays(cur(),27))+".";
+      : pb && pb.paid
+        ? hm(pb.owed)+" was owed back. Paid — you took "+hm(pb.block)+" in one block from "+shortDate(pb.on)+", which covers it."
+        : hm(45*60-wrMins)+" owed back, in one block attached to a rest of 9 hours or more, by the end of "+shortDate(addDays(cur(),27))+". It clears itself once your start and finish times show a long enough break.";
+    if(pb && pb.paid) wrCls="ok";
   }else{
     wrVal=wrMins?hm(wrMins):"—"; wrCls=wrMins?"warn":"";
     wrNote=wrMins
@@ -2065,6 +2228,9 @@ function renderPayslip(c){
     const owed=wroteOff?0:cin.owed, credit=cin.credit;
     const row=document.createElement("div");
     row.className="pl"+(raw===null?"":" has");
+    /* a shortfall too big to be rounding but too small to chase gets said out
+       loud, otherwise it is dropped silently and he never knows it happened. */
+    const gr=cout.graced||0;
 
     if(unit==="n"){
       /* the slider running to twelve is not arbitrary — a week they miss
@@ -2135,18 +2301,52 @@ function renderPayslip(c){
     /* ---- expenses open up to what was claimed, so a short payment can be
            traced to the receipt that is missing rather than just a gap ---- */
     if(key==="exp" && c.expItems.length){
+      const rawX=num(p[key]);
+      const shortP = rawX===null ? 0 : Math.round((e[key].cash-plActualCash(key,rawX))*100);
+      const hit  = shortP>0 ? expMissing(c.expItems, shortP) : null;
+      const pick = shortP>0 ? expRefOf(k, c.expItems, shortP) : null;
       const wrap=document.createElement("div");
-      wrap.style.display="none";
+      /* a line that matches says nothing — the receipts only come out when
+         there is money to account for. */
+      wrap.style.display = shortP>0 ? "block" : "none";
       c.expItems.forEach(x=>{
-        const li=document.createElement("div");
-        li.className="eitem";
-        li.innerHTML=`<span>${SHORTDAY[x.i]} · ${esc(x.label||"no description")}</span><span>${penceText(x.pence)}</span>`;
+        const on = !!pick && pick.key===x.key;
+        const pickable = shortP>0 && !locked;
+        const li=document.createElement(pickable?"button":"div");
+        if(pickable) li.type="button";
+        li.className="eitem"+(on?" pick":"");
+        li.innerHTML=`<span>${SHORTDAY[x.i]} &middot; ${esc(x.label||"no description")}`
+          +(on?`<i class="upc">&#9679; unpaid, carried over</i>`:"")
+          +`</span><span>${penceText(x.pence)}</span>`;
+        if(pickable) li.addEventListener("click",()=>{
+          const w=d.weeks[k]=d.weeks[k]||{};
+          if(w.expRef===x.key) delete w.expRef; else w.expRef=x.key;
+          save(); render();
+        });
         wrap.appendChild(li);
       });
       const tg=document.createElement("button");
       tg.className="more"; tg.type="button";
+      /* a short expenses line usually means one receipt did not make it, so
+         say which one rather than leaving a bare gap to work back from. where
+         it cannot be told apart, he picks — and the pick sticks to the
+         receipt, so the week it finally gets paid names it. */
+      if(shortP>0){
+        const nm=x=>SHORTDAY[x.i]+" "+(x.label||"no description")+" "+penceText(x.pence);
+        const note=document.createElement("p");
+        note.className="note exmiss";
+        note.textContent = !hit
+          ? "Nothing in your receipts comes to the "+penceText(shortP)+" short. They are all listed below \u2014 worth checking them off against the slip."
+          : hit.exact
+            ? (hit.items.length===1
+                ? "That is exactly "+nm(hit.items[0])+" \u2014 the receipt missing from the slip."
+                : "That is exactly "+hit.items.map(nm).join(" and ")+" \u2014 the receipts missing from the slip.")
+            : "That matches "+hit.items.length+" of your receipts, so it could be any of them: "+hit.items.map(nm).join(", ")+". Tap the one the slip missed and it will be named when it is paid.";
+        row.appendChild(note);
+      }
       const lab=()=>{ tg.innerHTML="<span>"+(wrap.style.display==="none"
         ? c.expItems.length+" item"+(c.expItems.length>1?"s":"") : "hide")+"</span><span class=\"cv\">&#9662;</span>"; };
+      if(wrap.style.display!=="none") tg.classList.add("open");
       lab();
       tg.addEventListener("click",()=>{
         wrap.style.display = wrap.style.display==="none" ? "block" : "none";
@@ -2161,21 +2361,27 @@ function renderPayslip(c){
       const st=document.createElement("div");
       let cls="strip", head="", body="", acts=true;
 
+      /* a shortfall pinned to a receipt is worth naming every time it comes
+         up. "£12.50 owed" is a number to work back from; "Mon parking £12.50"
+         is the thing itself, and the week it clears it says so. */
+      const rIn = cin.ref ? expRefText(cin.ref) : null;
+      const rOut = cout.ref ? expRefText(cout.ref) : null;
       if(owed>0 && cout.owed===0 && cout.credit===0){
         cls+=" done"; acts=false;
         head=`<span class="sh">${unitTxt(owed)}</span><span class="sd">from ${prettyDate(cin.from||k)} — <b>cleared by this slip</b></span>`;
-        body=`nothing outstanding on this line`;
+        body= rIn ? `that was <b>${esc(rIn)}</b> from ${prettyDate(cin.from||k)} — finally paid`
+                  : `nothing outstanding on this line`;
       }else if(owed>0 && cout.owed>0 && cout.owed<owed){
         head=`<span class="sh">${unitTxt(cout.owed)}</span><span class="sd">still owed — ${unitTxt(owed-cout.owed)} of the ${unitTxt(owed)} came through</span>`;
         body=`carried into next week`;
       }else if(owed>0){
         cls += unit==="yn" ? " miss" : "";
-        head=`<span class="sh">${unitTxt(owed)}</span><span class="sd">owed from ${prettyDate(cin.from||k)}</span>`;
+        head=`<span class="sh">${unitTxt(owed)}</span><span class="sd">owed from ${prettyDate(cin.from||k)}${rIn?" — "+esc(rIn):""}</span>`;
         body= unit==="yn"
           ? `only ever one a week, so it cannot come back through this line`
           : `expecting <b>${unitTxt(exp.units+owed)}</b> in total — ${unitTxt(exp.units)} this week, ${unitTxt(owed)} owed`;
       }else if(cout.owed>0){
-        head=`<span class="sh">${unitTxt(cout.owed)}</span><span class="sd">short on this slip</span>`;
+        head=`<span class="sh">${unitTxt(cout.owed)}</span><span class="sd">short on this slip${rOut?" — "+esc(rOut):""}</span>`;
         body=`carried into next week`;
       }else{
         cls+=" over"; acts=false;
@@ -2267,6 +2473,13 @@ function renderPayslip(c){
     const expects = unit==="£" ? exp.cash>0 : exp.units>0;
     const live = key==="nights" || key==="att" || expects || raw!==null
               || owed>0 || cin.credit>0 || cout.owed>0 || cout.credit>0;
+    if(gr>0){
+      const gn=document.createElement("p");
+      gn.className="note graced";
+      gn.textContent="Short by "+n2(gr)+" hours — too much to be rounding, but under the "
+        +n2(S("owedThresh"))+"-hour mark, so it is not being carried forward. Worth a look at the slip.";
+      row.appendChild(gn);
+    }
     if(live) box.appendChild(row); else { hid.appendChild(row); hidN++; }
   });
 
@@ -2288,12 +2501,40 @@ function renderPayslip(c){
   const t=plTotals(k,c);
   const hGap=t.slipH-t.expH, pGap=t.slipPay-t.expPay;
   const col=g=>Math.abs(g)<0.005?"var(--green)":"var(--red)";
-  document.getElementById("plTot").innerHTML=
-    `<div class="lrow"><span class="d" style="color:var(--text)">Line</span><span class="u">logged</span><span class="c">slip</span></div>
-     <div class="lrow"><span class="d">Paid hours</span><span class="u">${n2(t.expH)}</span>
-       <span class="c" style="color:${col(hGap)}">${n2(t.slipH)}</span></div>
-     <div class="lrow tot"><span class="d">Before tax</span><span class="u">${n2(t.expPay)}</span>
-       <span class="c" style="color:${col(pGap)}">${n2(t.slipPay)}</span></div>`;
+  /* the full reckoning: every line the slip has, what was logged beside what
+     was paid, and the difference. run the money chain over both sets so the
+     deduction rows move with the pay rather than being copied across. */
+  const mine={}, theirs={};
+  PL_LINES.forEach(([key])=>{
+    const raw=num(p[key]);
+    mine[key]=e[key].cash;
+    theirs[key]= raw===null ? e[key].cash : plActualCash(key,raw);
+  });
+  const mM=plMoney(k,mine,!locked), mT=plMoney(k,theirs,!locked);
+  const dcol=g=>Math.abs(g)<0.005?"var(--dim)":"var(--red)";
+  const dtxt=g=>Math.abs(g)<0.005?"—":(g>0?"+":"−")+n2(Math.abs(g));
+  const nn=v=>(v<-0.005?"\u2212":"")+n2(Math.abs(v));
+  const irow=(lbl,a,b,cls,est)=>
+    `<div class="lrow${cls?" "+cls:""}"><span class="d">${lbl}${est?" <i class=\"estb sm\">estimate</i>":""}</span>`+
+    `<span class="u">${nn(a)}</span><span class="c">${nn(b)}</span>`+
+    `<span class="g" style="color:${dcol(b-a)}">${dtxt(b-a)}</span></div>`;
+
+  let ih=`<div class="lrow hd"><span class="d">Line</span><span class="u">logged</span>`+
+         `<span class="c">slip</span><span class="g">diff</span></div>`;
+  ih+=`<div class="lrow"><span class="d">Paid hours</span><span class="u">${n2(t.expH)}</span>`+
+      `<span class="c">${n2(t.slipH)}</span>`+
+      `<span class="g" style="color:${dcol(hGap)}">${dtxt(hGap)}</span></div>`;
+  PL_LINES.forEach(([key,label])=>{
+    if(Math.abs(mine[key])<0.005 && Math.abs(theirs[key])<0.005) return;
+    ih+=irow(label,mine[key],theirs[key]);
+  });
+  ih+=irow("Before tax",mM.beforePension,mT.beforePension,"tot");
+  ih+=irow("Pension",-mM.pension,-mT.pension,"neg");
+  ih+=irow("Tax",-mM.tax,-mT.tax,"neg",1);
+  ih+=irow("National Insurance",-mM.ni,-mT.ni,"neg",1);
+  if(mM.sloan||mT.sloan) ih+=irow("Student loan",-mM.sloan,-mT.sloan,"neg",1);
+  ih+=irow("Take home",mM.net,mT.net,"tot");
+  document.getElementById("plTot").innerHTML=ih;
 
   const worst=[];
   PL_LINES.forEach(([key,label,unit,rateKey])=>{
@@ -2534,7 +2775,8 @@ const SETUP_RATES=[
   ["bhHours","Bank holiday hours","paid, not worked, counts towards the threshold"],
   ["holHours","Holiday hours a day","paid, not worked, counts towards the threshold"],
   ["sickRate","Sick pay","","sick"],
-  ["owedThresh","Ignore shortfalls under","hours — below this it is rounding, not a shortfall"]
+  ["owedRound","Rounding grace","hours — overtime short by less than this is rounding, ignored silently"],
+  ["owedThresh","Carry shortfalls over","hours — overtime short by less than this is flagged but not carried forward"]
 ];
 const SETUP_DED=[
   ["pensionRate","Pension %","of qualifying earnings, off before tax"],
