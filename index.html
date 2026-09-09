@@ -203,7 +203,7 @@ button.eitem.pick,.eitem.pick{border-left-color:var(--amber)}
 /* the payslip reckoning carries a third column, so its rows are tighter and
    the deduction rows are not painted red — a pension line is not a problem,
    and red here is reserved for a real difference. */
-#plTot .lrow{gap:6px;font-size:13.5px}
+#plTot .lrow{gap:6px;font-size:13.5px;align-items:flex-start}
 #plTot .lrow .d{flex:1;min-width:0}
 #plTot .lrow .u,#plTot .lrow .c{width:62px;text-align:right;font-size:13px;color:var(--dim)}
 #plTot .lrow .c{color:var(--text)}
@@ -211,6 +211,16 @@ button.eitem.pick,.eitem.pick{border-left-color:var(--amber)}
 #plTot .lrow.hd .d,#plTot .lrow.hd .u,#plTot .lrow.hd .c,#plTot .lrow.hd .g{color:var(--dim);font-size:12px}
 #plTot .lrow.neg .c{color:var(--text)}
 #plTot .lrow.tot .d{color:var(--text)}
+/* the money a line comes to, under its units, in the same cell — the block
+   is already four columns wide on a phone and will not take a fifth */
+#plTot .m{display:block;font-size:11.5px;line-height:1.35;color:var(--dim);margin-top:1px}
+#plTot .lrow.tot .m{font-weight:400}
+#plTot .note{margin:8px 0 0;font-size:12.5px;color:var(--dim)}
+/* units agreeing while the pounds do not is a stale rate, not a short payment */
+.ratewarn{display:block;width:100%;text-align:left;padding:6px 0 8px;
+  border:none;border-bottom:1px solid var(--rule);background:none;
+  font:inherit;font-size:12.5px;color:var(--red);cursor:pointer;-webkit-appearance:none}
+.ratewarn u{text-decoration:underline}
 .note.graced{color:var(--amber);margin-top:4px}
 .note.exmiss{margin-top:4px}
 .estb.sm{display:inline;margin:0 0 0 5px;padding:1px 5px;font-size:9.5px;vertical-align:middle}
@@ -484,7 +494,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
   </div>
 </header>
 
-<div class="hero">
+<div class="hero" id="hero">
   <div class="fig" id="heroFig">£0<small>.00</small></div>
   <span class="estb" id="heroEst" style="display:none">estimate</span>
   <div class="sub" id="heroSub">—</div>
@@ -725,7 +735,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v25";
+const BUILD="v26";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -1735,6 +1745,9 @@ function render(){
 
   const fig=document.getElementById("heroFig"), sub=document.getElementById("heroSub"), strip=document.getElementById("heroStrip");
   fig.className="fig"; sub.style.display="";
+  /* More is settings, not figures — no hero, no stat strip. */
+  const heroBox=document.getElementById("hero");
+  if(heroBox) heroBox.style.display = tab==="more" ? "none" : "";
   /* only the week hero uses the shared marker — the two-figure heroes carry
      their own, one under each number. */
   const hEst=document.getElementById("heroEst");
@@ -2497,44 +2510,99 @@ function renderPayslip(c){
     box.appendChild(hid);
   }
 
-  /* totals — hours first, pounds underneath */
+  /* totals — units on top, the money they come to underneath, on both sides.
+     the slip column is left blank on any line he has not actually checked:
+     it used to be pre-filled with what the app expected, so the slip looked
+     like it agreed with figures nobody had ever looked at. */
   const t=plTotals(k,c);
   const hGap=t.slipH-t.expH, pGap=t.slipPay-t.expPay;
-  const col=g=>Math.abs(g)<0.005?"var(--green)":"var(--red)";
-  /* the full reckoning: every line the slip has, what was logged beside what
-     was paid, and the difference. run the money chain over both sets so the
-     deduction rows move with the pay rather than being copied across. */
-  const mine={}, theirs={};
+  const wkc=d.weeks[k]||{};
+  /* a line counts as checked when a figure was typed or a tick stored one.
+     nights are a slider, so they carry their own confirmation flag. */
+  const conf=key=> num(p[key])!==null || (key==="nights" && !!(wkc.chk||{}).nights);
+  const dcol=g=>Math.abs(g)<0.005?"var(--dim)":"var(--red)";
+  const dtxt=g=>Math.abs(g)<0.005?"\u2014":(g>0?"+":"\u2212")+n2(Math.abs(g));
+  const mny=v=>(v<-0.005?"\u2212":"")+"\u00a3"+n2(Math.abs(v));
+
+  const mine={}, mineU={}, theirs={}, theirsU={};
   PL_LINES.forEach(([key])=>{
     const raw=num(p[key]);
-    mine[key]=e[key].cash;
-    theirs[key]= raw===null ? e[key].cash : plActualCash(key,raw);
+    mine[key]=e[key].cash; mineU[key]=e[key].units;
+    if(!conf(key)){ theirs[key]=null; theirsU[key]=null; return; }
+    theirs[key] = raw===null ? e[key].cash : plActualCash(key,raw);
+    theirsU[key]= raw===null ? e[key].units : raw;
   });
-  const mM=plMoney(k,mine,!locked), mT=plMoney(k,theirs,!locked);
-  const dcol=g=>Math.abs(g)<0.005?"var(--dim)":"var(--red)";
-  const dtxt=g=>Math.abs(g)<0.005?"—":(g>0?"+":"−")+n2(Math.abs(g));
-  const nn=v=>(v<-0.005?"\u2212":"")+n2(Math.abs(v));
-  const irow=(lbl,a,b,cls,est)=>
+  /* a line shows if the app expects something on it or he has checked it */
+  const live=([key])=>Math.abs(mine[key])>=0.005 || conf(key);
+  const shownK=PL_LINES.filter(live).map(l=>l[0]);
+  const allConf = shownK.length>0 && shownK.every(conf);
+  const allConfH = PL_LINES.filter(l=>l[2]==="h").filter(live).map(l=>l[0]).every(conf);
+  /* the deduction chain needs a full set of figures, so unchecked lines fall
+     back to what was logged — those rows only ever show once every line is in. */
+  const forMoney={}; PL_LINES.forEach(([key])=>{ forMoney[key]= theirs[key]===null?mine[key]:theirs[key]; });
+  const mM=plMoney(k,mine,!locked), mT=plMoney(k,forMoney,!locked);
+
+  const cell=(cls,top,bot)=>`<span class="${cls}">${top}${bot?`<i class="m">${bot}</i>`:""}</span>`;
+  const trow=(lbl,a,b,cls,est)=>
     `<div class="lrow${cls?" "+cls:""}"><span class="d">${lbl}${est?" <i class=\"estb sm\">estimate</i>":""}</span>`+
-    `<span class="u">${nn(a)}</span><span class="c">${nn(b)}</span>`+
-    `<span class="g" style="color:${dcol(b-a)}">${dtxt(b-a)}</span></div>`;
+    `<span class="u">${mny(a)}</span><span class="c">${allConf?mny(b):"\u2014"}</span>`+
+    `<span class="g" style="color:${allConf?dcol(b-a):"var(--dim)"}">${allConf?dtxt(b-a):"\u2014"}</span></div>`;
 
   let ih=`<div class="lrow hd"><span class="d">Line</span><span class="u">logged</span>`+
          `<span class="c">slip</span><span class="g">diff</span></div>`;
+
+  const slipH = allConfH
+    ? PL_LINES.reduce((a,[key,,unit])=> unit==="h" && theirsU[key]!==null ? a+theirsU[key] : a, 0)
+    : null;
+  const phG = slipH===null ? null : slipH-t.expH;
   ih+=`<div class="lrow"><span class="d">Paid hours</span><span class="u">${n2(t.expH)}</span>`+
-      `<span class="c">${n2(t.slipH)}</span>`+
-      `<span class="g" style="color:${dcol(hGap)}">${dtxt(hGap)}</span></div>`;
-  PL_LINES.forEach(([key,label])=>{
-    if(Math.abs(mine[key])<0.005 && Math.abs(theirs[key])<0.005) return;
-    ih+=irow(label,mine[key],theirs[key]);
+      `<span class="c">${slipH===null?"\u2014":n2(slipH)}</span>`+
+      `<span class="g" style="color:${phG===null?"var(--dim)":dcol(phG)}">${phG===null?"\u2014":dtxt(phG)}</span></div>`;
+
+  PL_LINES.forEach(([key,label,unit])=>{
+    if(!live([key])) return;
+    const isU = unit==="h" || unit==="n";
+    const fu = v=> unit==="h" ? n2(v) : String(v);
+    const uTop = isU ? fu(mineU[key]) : mny(mine[key]);
+    const uBot = isU ? mny(mine[key]) : "";
+    let cTop="\u2014", cBot="", gTop="\u2014", gBot="", gc="var(--dim)", warn=false;
+    if(conf(key)){
+      cTop = isU ? fu(theirsU[key]) : mny(theirs[key]);
+      cBot = isU ? mny(theirs[key]) : "";
+      const gp = theirs[key]-mine[key];
+      if(isU){
+        const gu = theirsU[key]-mineU[key];
+        gTop = dtxt(gu); gc = dcol(gu);
+        /* units agreeing while the money does not is not a payroll dispute —
+           the money is only units times his own stored rate, so the rate is
+           what is wrong. no pounds figure on the line, a warning instead. */
+        if(Math.abs(gu)<0.005) warn = Math.abs(gp)>=0.01;
+        else gBot = (gp>0?"+":"\u2212")+"\u00a3"+n2(Math.abs(gp));
+      }else{
+        gTop = Math.abs(gp)<0.005 ? "\u2014" : (gp>0?"+":"\u2212")+"\u00a3"+n2(Math.abs(gp));
+        gc = dcol(gp);
+      }
+    }
+    ih+=`<div class="lrow"><span class="d">${label}</span>`+cell("u",uTop,uBot)+cell("c",cTop,cBot)+
+        `<span class="g" style="color:${gc}">${gTop}${gBot?`<i class="m">${gBot}</i>`:""}</span></div>`;
+    if(warn){
+      const rn = unit==="n" ? "night out or meal" : label.toLowerCase();
+      ih+=`<button class="ratewarn" type="button">Hours agree but the money does not \u2014 `+
+          `your ${rn} rate may be out of date. <u>Check your rates</u></button>`;
+    }
   });
-  ih+=irow("Before tax",mM.beforePension,mT.beforePension,"tot");
-  ih+=irow("Pension",-mM.pension,-mT.pension,"neg");
-  ih+=irow("Tax",-mM.tax,-mT.tax,"neg",1);
-  ih+=irow("National Insurance",-mM.ni,-mT.ni,"neg",1);
-  if(mM.sloan||mT.sloan) ih+=irow("Student loan",-mM.sloan,-mT.sloan,"neg",1);
-  ih+=irow("Take home",mM.net,mT.net,"tot");
+
+  ih+=trow("Before tax",mM.beforePension,mT.beforePension,"tot");
+  ih+=trow("Pension",-mM.pension,-mT.pension,"neg");
+  ih+=trow("Tax",-mM.tax,-mT.tax,"neg",1);
+  ih+=trow("National Insurance",-mM.ni,-mT.ni,"neg",1);
+  if(mM.sloan||mT.sloan) ih+=trow("Student loan",-mM.sloan,-mT.sloan,"neg",1);
+  ih+=trow("Take home",mM.net,mT.net,"tot");
+  if(!allConf && !locked)
+    ih+=`<p class="note">The slip side of the totals stays blank until every line above has been checked.</p>`;
   document.getElementById("plTot").innerHTML=ih;
+  document.getElementById("plTot").querySelectorAll(".ratewarn")
+    .forEach(b=>b.addEventListener("click",goRates));
 
   const worst=[];
   PL_LINES.forEach(([key,label,unit,rateKey])=>{
@@ -3082,6 +3150,12 @@ function switchTab(t){
   render();
 }
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
+/* straight from a rate warning on the payslip to the rate fields themselves */
+function goRates(){
+  switchTab("more");
+  const el=document.getElementById("setRates");
+  if(el && el.scrollIntoView) el.scrollIntoView({block:"start"});
+}
 /* how far forward the day and week tabs may run: the end of next week.
    past that there is nothing to log and nothing to see, and a bank holiday
    sitting years ahead used to price a week that had not happened yet.

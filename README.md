@@ -365,7 +365,7 @@ finish-time handler; the gov.uk fetch does not.
 
 ## Tests
 
-46 suites in `/home/claude/t/`, 1111 checks, all green as of v25. Run with
+47 suites in `/home/claude/t/`, 1143 checks, all green as of v26. Run with
 `node <file>.js`. (`dom.js` is the bootstrap and prints no count of its own.)
 
 `test.js` · `hol.js` · `new2.js` · `holui.js` · `dom.js` · `hdr.js` · `imp.js` ·
@@ -740,6 +740,46 @@ week that has not been paid.
 There are no tax or NI rows on this tab — both are display-only — so the
 question of offering a tick on an estimated figure does not arise.
 `tick.js`, 45 checks.
+
+## What v26 changed
+
+### The slip column no longer fills itself in
+
+The itemised block under the payslip used to show what the app *expected*
+in the slip column on every line, whether or not you had checked that line.
+It looked as though the slip agreed with figures nobody had looked at.
+
+Now the slip column is blank on any line you have not checked. A line counts
+as checked when a figure has been typed on it, when the tick has stored one,
+or — for the nights row, which is a slider — when its own tick has been
+tapped. The totals below (before tax, pension, tax, NI, take home) stay blank
+on the slip side until every line above has been checked, with a note saying
+so; the "paid hours" line waits for every hourly line.
+
+### Every line now shows hours and pounds
+
+Each line carries its units on top and the money they come to underneath, in
+the same cell, on the logged side, the slip side and the difference. Night
+out and meal show the count with its total beneath. Lines that are money only
+— attendance, SSP, expenses — stay single height.
+
+The difference column shows both too: hours on top, pounds underneath.
+
+### A stale rate is not a payroll dispute
+
+If the hours on a line agree but the money does not, that is not something to
+query with payroll — the money is only the hours multiplied by the rate stored
+in your own settings. Such a line gets a red note underneath instead of a
+pounds figure, and tapping it takes you straight to the rate fields.
+
+Worth knowing: as the app stands this warning cannot actually appear. Both
+columns multiply by the same stored rate, so if the hours match the pounds
+must match. It only becomes live if the pounds from the slip are ever entered
+by hand.
+
+### More is settings, not figures
+
+The hero figure and the row of stats beneath it are hidden on the More tab.
 
 ## What v25 changed
 
