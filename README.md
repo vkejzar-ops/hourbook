@@ -365,7 +365,7 @@ finish-time handler; the gov.uk fetch does not.
 
 ## Tests
 
-47 suites in `/home/claude/t/`, 1143 checks, all green as of v26. Run with
+47 suites in `/home/claude/t/`, 1176 checks, all green as of v27. Run with
 `node <file>.js`. (`dom.js` is the bootstrap and prints no count of its own.)
 
 `test.js` · `hol.js` · `new2.js` · `holui.js` · `dom.js` · `hdr.js` · `imp.js` ·
@@ -740,6 +740,46 @@ week that has not been paid.
 There are no tax or NI rows on this tab — both are display-only — so the
 question of offering a tick on an estimated figure does not arise.
 `tick.js`, 45 checks.
+
+## What v27 changed
+
+### The payslip week opens the day before payday
+
+The slip goes up on the portal the day before the money lands, so the week now
+unlocks for checking then rather than on the Friday itself.
+
+The pay date has not moved. It is still the Friday eleven days after the week
+begins, stepping back off a bank holiday, and it is still what the tax week is
+worked out from and what the slip is dated. Only the moment the app lets you
+type into it has changed.
+
+### A night out is worth £30, not £25.04
+
+The "today's take home" figure on the day took the day's gross and scaled it
+by the whole week's net-to-gross ratio. That is right for wages, but night
+out, meal and expenses are never taxed, so scaling them quietly shaved money
+off: a £30 night out on an otherwise empty day read £25.04.
+
+The day's untaxed money now passes through at face value and only the taxable
+part is scaled. The week's take home was always right and is unchanged.
+
+### Unpaid time inside a shift
+
+A new fold on the day, closed until it is used: **Unpaid time**. Put in a
+figure — 0400 for four hours — and those hours come off the pay.
+
+They come off the pay *only*. The shift still ran clock-in to clock-out, so
+daily rest, the 24-hour window, the reduced-rest count and the tacho figures
+are all left exactly as they were. This is for a long stop mid-shift that
+payroll will not pay for but that never stopped being part of the shift.
+
+Where the week is already over the fifty-hour cap the hours come off the
+overtime, because they come off the top of the pool. The deduction can never
+be larger than the shift itself. The day shows a "paid" card beside "on the
+clock" whenever the two differ.
+
+Note the week list still shows the full clock hours for the day, not the paid
+ones.
 
 ## What v26 changed
 

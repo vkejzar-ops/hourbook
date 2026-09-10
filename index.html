@@ -367,6 +367,24 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
 .cards b{display:block;font-size:19px;font-weight:600}
 .cards b.amber{color:var(--amber)}
 .cards span{font-size:12px;color:var(--dim)}
+/* ---- unpaid time inside a shift: folded away, it is a rare thing ---- */
+.dedb{border-top:1px solid var(--rule);margin-top:14px}
+.dedb summary{
+  list-style:none;cursor:pointer;padding:13px 0;
+  font-size:12.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);
+  display:flex;align-items:center;gap:8px;
+}
+.dedb summary::-webkit-details-marker{display:none}
+.dedb summary i{font-style:normal;letter-spacing:0;text-transform:none;color:var(--red);font-size:14px}
+.dedb summary::after{content:"+";margin-left:auto;font-size:17px;letter-spacing:0;color:var(--dim)}
+.dedb[open]>summary::after{content:"\2212"}
+.dedb .fold{padding-bottom:12px}
+.dedb input{
+  width:100%;background:var(--panel);border:1px solid var(--rule);border-radius:11px;
+  padding:12px;font:inherit;font-size:19px;font-variant-numeric:tabular-nums;
+  color:var(--text);text-align:center;-webkit-appearance:none
+}
+.dedb .note{font-size:12.5px;color:var(--dim);margin:8px 0 0;line-height:1.45}
 .linkrow{color:var(--amber);font-size:14.5px;padding:16px 0 4px;display:block;width:100%;text-align:left}
 
 /* ---- week rows ---- */
@@ -735,7 +753,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v26";
+const BUILD="v27";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -1090,6 +1108,7 @@ function calc(monKey, skip){
   const wk=d.weeks[monKey]||{};
   let weekdayMins=0, satMins=0, sunMins=0, bhWorkedPaid=0, bhWorkedMins=0;
   let nights=0, bhDays=0, holDays=0, sickDays=0, workedMins=0, driveMins=0, extDrive=0;
+  let dedMins=0;
   let bhPending=0, holPending=0;
   let expP=0; const expItems=[];
   let redRest=0, shortRest=0, assumedDrive=0;
@@ -1101,6 +1120,12 @@ function calc(monKey, skip){
     if(ds===skip) return;
     const r=d.days[ds]||{};
     const mins=duration(r.start,r.end);
+    /* time inside a shift that will not be paid — a long stop for a rest he
+       chose to take, say. it comes off the pay only. the shift still ran from
+       clock-in to clock-out, so daily rest, the 24-hour window and the tacho
+       figures are all left exactly as they were. */
+    const ded=Math.min(mins, durMins(r.ded)||0);
+    const pmins=mins-ded;
     /* a holiday only counts on a weekday you did not work.
        if it is also a bank holiday, the bank holiday wins — never both. */
     const onHol = i<5 && !!r.hol && mins===0 && !BH.has(ds) && !r.sick;
@@ -1117,6 +1142,7 @@ function calc(monKey, skip){
       expP+=a; expItems.push({ds, i, n, key:ds+"#"+n, pence:a, label:expLabel(x)});
     });
     workedMins+=mins;
+    dedMins+=ded;
     if(r.night) nights++;
 
     /* attendance: every Mon–Fri needs hours on it, unless it is a bank
@@ -1131,12 +1157,12 @@ function calc(monKey, skip){
        the day view still shows it as coming, so nothing looks lost. */
     if(i<5 && BH.has(ds)){
       if(mins===0){ if(ds>todayIso) bhPending++; else bhDays++; }
-      else { bhWorkedMins+=mins; bhWorkedPaid+=Math.max(q(mins),S("sunMin")*60); }
+      else { bhWorkedMins+=pmins; bhWorkedPaid+=pmins>0?Math.max(q(pmins),S("sunMin")*60):0; }
     }
     else if(onHol){ if(ds>todayIso) holPending++; else holDays++; }
-    else if(i<5) weekdayMins+=mins;
-    else if(i===5) satMins+=mins;
-    else sunMins+=mins;
+    else if(i<5) weekdayMins+=pmins;
+    else if(i===5) satMins+=pmins;
+    else sunMins+=pmins;
 
     const dv=driveInfo(ds,r);
     driveMins+=dv.mins;
@@ -1241,7 +1267,7 @@ function calc(monKey, skip){
     dates, lines:L, nights, bhDays, bhMins, bhWorkedMins, bhWorkedPaid,
     holDays, holMins, sickDays, ssp, sspPred, sickRate, expenses, expItems,
     bhPending, holPending,
-    workedMins, paidMins:basicMins+otMins+satPaid+sunPaid+bhWorkedPaid,
+    workedMins, dedMins, paidMins:basicMins+otMins+satPaid+sunPaid+bhWorkedPaid,
     basicMins, basicWorked, holBasic, otMins, satPaid, sunPaid,
     beforePension, pension, pensionable, cash, taxable, tax, ni, sloan, net,
     driveMins, extDrive, redRest, shortRest, assumedDrive,
@@ -1674,14 +1700,18 @@ function taxFor(k, taxableThisWeek){
 /* a week only accepts payslip figures once its payday has been. before that
    there is no slip in his hand to copy from, so the tab shows predictions and
    locks the inputs. this unlocks itself on the payday — nothing to switch. */
-function plLocked(k){ return paydayOf(k) > iso(new Date()); }
+/* the slip goes up on the portal the day before the money lands, so that is
+   when the week opens for checking. the pay date itself does not move: the
+   tax week is worked out from it, and it is what the slip is dated. */
+function slipOpens(k){ return addDays(paydayOf(k),-1); }
+function plLocked(k){ return slipOpens(k) > iso(new Date()); }
 
-/* the last week whose payday has already been and gone */
+/* the last week whose slip is already up */
 function lastPaidWeek(){
   let k=mondayOf(iso(new Date()));
   const today=iso(new Date());
   for(let i=0;i<60;i++){
-    if(paydayOf(k)<=today) return k;
+    if(slipOpens(k)<=today) return k;
     k=addDays(k,-7);
   }
   return k;
@@ -1765,8 +1795,16 @@ function render(){
        ratio. going at it the other way — c.net minus cx.net — would dump the
        whole £50 attendance allowance onto whichever day happened to finish the
        week, which is the same trap the gross figure above already sidesteps. */
+    /* night out, meal and expenses are never taxed, so scaling them by the
+       week's overall net-to-gross ratio quietly shaved money off them — a
+       £30 night out on its own read £25.04. pay the untaxed part of the day
+       through at face value and scale only what the taxman actually sees. */
+    const untaxed = x => x.nights*(S("nightOut")+S("meal")) + x.expenses;
+    const dayFree = untaxed(c)-untaxed(cx);
+    const weekTaxed = c.beforePension-untaxed(c);
+    const keepRate = weekTaxed>0 ? (c.net-untaxed(c))/weekTaxed : 1;
     const dayNet = dayGross===null||!c.beforePension ? null
-                 : dayGross * (c.net/c.beforePension);
+                 : dayFree + (dayGross-dayFree)*keepRate;
     const dayLogged = mins>0 || (BH.has(curDay)&&dowIndex(curDay)<5) || !!r.hol || !!r.sick || !!r.night;
     fig.className="fig two";
     fig.innerHTML=
@@ -1834,6 +1872,7 @@ function renderDay(c){
   const d=load(), r=d.days[curDay]||{}, box=document.getElementById("dayBody");
   const i=dowIndex(curDay), isBH=BH.has(curDay)&&i<5;
   const worked=duration(r.start,r.end);
+  const dedM=Math.min(worked, durMins(r.ded)||0);
   const dv=driveInfo(curDay,r);
   const wi=wtdInfo(curDay,r);
   const ri=restInfo(curDay), rb=ri?ri.gap:null, kind=restKind(ri);
@@ -1966,8 +2005,21 @@ function renderDay(c){
       ${xs.length?`<span class="hint">Type the digits &mdash; 1250 reads as \u00a312.50. Clear an amount to \u00a30.00 and tap away to remove the row.</span>`:""}
     </div>
 
-    <div class="cards">
+    <details class="dedb"${dedM?" open":""}>
+      <summary>Unpaid time${dedM?` <i>−${hm(dedM)}</i>`:""}</summary>
+      <div class="fold">
+        <input class="dd" inputmode="numeric" maxlength="4" placeholder="0000"
+               value="${durText(durMins(r.ded))}" aria-label="Unpaid time">
+        <p class="note">Time inside the shift that will not be paid — a long stop
+        for a rest you chose to take, say. In hours and minutes, so 0400 is four
+        hours. It comes off the pay only: the shift still ran ${worked?hm(worked):"its full length"}
+        for daily rest, the 24-hour window and the tacho.</p>
+      </div>
+    </details>
+
+    <div class="cards${dedM?" three":""}">
       <div><b>${worked?hm(worked):"—"}</b><span>on the clock</span></div>
+      ${dedM?`<div><b>${hm(Math.max(0,worked-dedM))}</b><span>paid</span></div>`:""}
       <div><b class="amber">${hm(c.workedMins)}</b><span>week so far</span></div>
     </div>
     ${lastBlock}${nextBlock}
@@ -2023,7 +2075,7 @@ function renderDay(c){
   const skBtn=box.querySelector(".sk");
   if(skBtn) skBtn.addEventListener("click",()=>set("sick",r.sick?"":true));
 
-  [["dv","drive"],["ow","other"]].forEach(([cls,key])=>{
+  [["dv","drive"],["ow","other"],["dd","ded"]].forEach(([cls,key])=>{
     const el=box.querySelector("."+cls);
     if(!el) return;
     el.addEventListener("change",e=>{
