@@ -365,7 +365,7 @@ finish-time handler; the gov.uk fetch does not.
 
 ## Tests
 
-47 suites in `/home/claude/t/`, 1176 checks, all green as of v27. Run with
+50 suites in `/home/claude/t/`, 1251 checks, all green as of v28. Run with
 `node <file>.js`. (`dom.js` is the bootstrap and prints no count of its own.)
 
 `test.js` · `hol.js` · `new2.js` · `holui.js` · `dom.js` · `hdr.js` · `imp.js` ·
@@ -740,6 +740,67 @@ week that has not been paid.
 There are no tax or NI rows on this tab — both are display-only — so the
 question of offering a tick on an estimated figure does not arise.
 `tick.js`, 45 checks.
+
+## What v28 changed
+
+### Rates belong to a date, not to a box
+
+Until now every rate was a single stored number. Change it and the app
+recalculated **every** week you had ever logged, including ones already paid
+and checked off, so old weeks silently rewrote themselves.
+
+Rates now belong to an era. Settings still hold your current figures exactly
+as before; closed eras sit behind them, each ending on a Sunday. A week is
+priced at whatever was in force then, so a week already paid keeps the money
+it was paid under.
+
+Use **My pay has changed** in the Rates fold on the day your rates change.
+It keeps the figures you have now for every week up to the date you give, and
+from the Monday after, the boxes take over and you edit them to the new ones.
+A mid-week date is moved to the Sunday, because pay is worked out a week at a
+time.
+
+The worst of the old behaviour was the payroll sheet: a debt your **old**
+employer still owed you was being quoted at your **new** employer's rate. A
+debt is now priced at the era it arose in.
+
+An install with no history behaves exactly as it always did.
+
+### Overtime by the day
+
+A second overtime rule, chosen in the Rates fold and stored per era, so
+changing jobs changes the rule as well as the money.
+
+- **By the week** (the default, unchanged) — weekday, bank holiday and
+  holiday hours go into one pool, everything past the threshold is overtime.
+- **By the day** — each weekday stands on its own. Anything past the daily
+  figure on that day is overtime, and there is no weekly threshold at all.
+
+Under the daily rule: Saturday and Sunday keep their own rate and do not take
+overtime on top; holiday and bank holiday hours pay at basic and never become
+overtime; unpaid time comes off before the daily figure is measured, so a
+twelve-hour shift with four unpaid is eight paid and no overtime.
+
+Switching the rule without closing the old rates off first will rewrite your
+history, so it asks first.
+
+### A night out with no meal voucher
+
+Some employers pay a night out and a separate meal voucher, some pay one
+higher figure and no voucher. Set the meal to 0 and the second is what you
+get — the money and the wording both follow, and the slip line reads
+"Night out" rather than "Night out + meal".
+
+### Employer rates cannot be read without a date
+
+Internally, the thirteen employer rates now have to be read as at a week.
+The tests turn that into a hard error and then drive every screen, which is
+what caught the debt-pricing bug above.
+
+Tax, NI, pension and student loan are deliberately *not* era-aware. They are
+statutory, they already move with the tax year, and the real figures come off
+the slip. Changing jobs mid-year is a P45 matter and the app does not try to
+model it.
 
 ## What v27 changed
 

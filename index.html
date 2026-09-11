@@ -625,7 +625,13 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
 
     <details>
       <summary>Rates</summary>
-      <div class="fold"><div id="setRates"></div></div>
+      <div class="fold">
+        <div id="setOt"></div>
+        <div id="setRates"></div>
+        <button class="btn" id="rateChanged">My pay has changed</button>
+        <p class="note">Use this the day your rates change — a new job, or a rise. The figures above are kept as they are for every week up to the date you give, so weeks you have already been paid for stay exactly as they were paid. From the Monday after, the boxes above are what counts, and you edit them to the new ones.</p>
+        <div id="rateHist"></div>
+      </div>
     </details>
 
     <details>
@@ -739,6 +745,11 @@ const DEFAULTS = {
   satRate:20.96, satMin:5,
   sunRate:20.96, sunMin:5,
   nightOut:25.00, meal:5.00, attendance:50.00,
+  /* how overtime is worked out. "week" is the pool-over-basicCap rule; "day"
+     pays anything past otDayHours on a single weekday at the overtime rate
+     and has no weekly threshold at all. "week" is the default and stays the
+     default — nobody gets the other one without asking for it. */
+  otMode:"week", otDayHours:8,
   bhHours:10,
   holHours:10,
   sickRate:"",
@@ -753,7 +764,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v27";
+const BUILD="v28";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -787,7 +798,56 @@ function save(){
   try{ localStorage.setItem(KEY,JSON.stringify(mem)); }
   catch(e){ memOnly=true; }
 }
-const S = k => { const v = load().settings[k]; return (v===undefined||v===null||v==="") ? DEFAULTS[k] : Number(v); };
+/* ---- rates that belong to an employer, not to the tax system ----
+   these are the ones that change when the job changes. tax, NI, pension and
+   student loan are deliberately NOT here: they are statutory, they already
+   move with the tax year, and the real figures come off the slip anyway. */
+const RATE_KEYS=["basicRate","basicCap","otRate","satRate","satMin","sunRate","sunMin",
+                 "nightOut","meal","attendance","bhHours","holHours","sickRate",
+                 "otMode","otDayHours"];
+
+/* closed eras, oldest first, each ending on the Sunday it stopped applying.
+   settings hold the CURRENT rates, exactly as they always have — the history
+   sits behind them. an empty history means nothing has ever changed, which is
+   every install until somebody says otherwise. */
+function rateHist(){ const h=load().settings.rateHist; return Array.isArray(h)?h:[]; }
+function rateSetFor(ds){
+  const h=rateHist();
+  for(let i=0;i<h.length;i++) if(h[i] && h[i].to && ds<=h[i].to) return h[i].rates||{};
+  return null;                     /* null = the open era, i.e. live settings */
+}
+/* set true by the tests: any employer rate read without a date is a bug, and
+   it should fail loudly in a test rather than quietly price an old week at
+   today's money. off in the app, where a stray read must not break the page. */
+let STRICT_RATES=false;
+function rawS(k,ds){
+  if(RATE_KEYS.indexOf(k)>=0){
+    if(!ds && STRICT_RATES) throw new Error("S(\""+k+"\") read with no date");
+    if(ds){
+      const r=rateSetFor(ds);
+      if(r){
+        const v=r[k];
+        return (v===undefined||v===null||v==="") ? DEFAULTS[k] : v;
+      }
+    }
+  }
+  const v=load().settings[k];
+  return (v===undefined||v===null||v==="") ? DEFAULTS[k] : v;
+}
+const S = (k,ds) => Number(rawS(k,ds));
+/* a deliberate read of the CURRENT rate with no week attached — the settings
+   editor, which is showing you the live figures by definition */
+const SNOW = k => { const was=STRICT_RATES; STRICT_RATES=false;
+  const v=Number(rawS(k,null)); STRICT_RATES=was; return v; };
+/* the same, for the overtime rule, which is a word rather than a number */
+const SMODE_NOW = () => { const was=STRICT_RATES; STRICT_RATES=false;
+  const v=SMODE(null); STRICT_RATES=was; return v; };
+const SMODE = ds => String(rawS("otMode",ds))==="day" ? "day" : "week";
+/* what one night away is worth, all in. some employers pay a night out and a
+   separate meal voucher, some pay one higher figure and no voucher — setting
+   the meal to nothing gives the second, and the wording follows it. */
+const nightRate = ds => S("nightOut",ds)+S("meal",ds);
+const nightLabel = ds => S("meal",ds)>0 ? "Night out + meal" : "Night out";
 /* the string version — tax code and student loan plan are text, not numbers */
 const SS = k => { const v = load().settings[k]; return (v===undefined||v===null||v==="") ? DEFAULTS[k] : String(v); };
 
@@ -1104,9 +1164,14 @@ function penceFrom(txt){
 /* ============ the week's maths ============ */
 function calc(monKey, skip){
   const d=load();
+  /* every employer rate in here is read as at the week being worked out, not
+     as at today. a week already paid keeps the money it was paid under. */
+  const AT=monKey;
+  const dayOt=SMODE(AT)==="day";
   const dates=[]; for(let i=0;i<7;i++) dates.push(addDays(monKey,i));
   const wk=d.weeks[monKey]||{};
   let weekdayMins=0, satMins=0, sunMins=0, bhWorkedPaid=0, bhWorkedMins=0;
+  let dayOtMins=0;        /* daily-overtime mode: hours past the daily figure */
   let nights=0, bhDays=0, holDays=0, sickDays=0, workedMins=0, driveMins=0, extDrive=0;
   let dedMins=0;
   let bhPending=0, holPending=0;
@@ -1157,10 +1222,15 @@ function calc(monKey, skip){
        the day view still shows it as coming, so nothing looks lost. */
     if(i<5 && BH.has(ds)){
       if(mins===0){ if(ds>todayIso) bhPending++; else bhDays++; }
-      else { bhWorkedMins+=pmins; bhWorkedPaid+=pmins>0?Math.max(q(pmins),S("sunMin")*60):0; }
+      else { bhWorkedMins+=pmins; bhWorkedPaid+=pmins>0?Math.max(q(pmins),S("sunMin",AT)*60):0; }
     }
     else if(onHol){ if(ds>todayIso) holPending++; else holDays++; }
-    else if(i<5) weekdayMins+=pmins;
+    else if(i<5){
+      weekdayMins+=pmins;
+      /* daily overtime is worked out a day at a time and rounded a day at a
+         time — the days do not pool, so neither does the rounding. */
+      if(dayOt) dayOtMins+=q(Math.max(0,pmins-S("otDayHours",AT)*60));
+    }
     else if(i===5) satMins+=pmins;
     else sunMins+=pmins;
 
@@ -1181,37 +1251,50 @@ function calc(monKey, skip){
     if(orq && orq.kind==="short") shortRest++;
   });
 
-  const bhMins=bhDays*S("bhHours")*60;
-  const holMins=holDays*S("holHours")*60;
+  const bhMins=bhDays*S("bhHours",AT)*60;
+  const holMins=holDays*S("holHours",AT)*60;
   const pool=weekdayMins+bhMins+holMins;
-  const capMins=S("basicCap")*60;
-  const basicMins=Math.min(capMins,pool);
-  const otMins=q(Math.max(0,pool-basicMins));
-  const satPaid=satMins>0?Math.max(q(satMins),S("satMin")*60):0;
-  const sunPaid=sunMins>0?Math.max(q(sunMins),S("sunMin")*60):0;
+  /* two ways of splitting the same pool.
+
+     week mode: everything up to the weekly threshold is basic, the rest is
+     overtime. bank holiday and holiday hours count towards the threshold.
+
+     day mode: each weekday stands alone — anything past the daily figure on
+     that day is overtime, and there is no weekly threshold at all. holiday
+     and bank holiday hours are paid at basic and never turn into overtime,
+     the same as they never do in week mode. */
+  const capMins=dayOt ? pool : S("basicCap",AT)*60;
+  const otMins=dayOt ? Math.min(dayOtMins,weekdayMins) : q(Math.max(0,pool-Math.min(capMins,pool)));
+  /* week mode keeps its old shape exactly: basic is the pool up to the
+     threshold, and the quarter-hour rounding on overtime does not claw
+     anything back out of basic. day mode has no threshold, so basic is
+     simply whatever was not overtime. */
+  const basicMins=dayOt ? pool-otMins : Math.min(capMins,pool);
+  const satPaid=satMins>0?Math.max(q(satMins),S("satMin",AT)*60):0;
+  const sunPaid=sunMins>0?Math.max(q(sunMins),S("sunMin",AT)*60):0;
 
   /* holiday hours fill the basic pool first, so they are never overtime.
      split them out so each matches its own line on the slip. */
   const holBasic=Math.min(holMins,basicMins);
   const basicWorked=basicMins-holBasic;
 
-  const holPay=dec(holBasic)*S("basicRate");
-  const basicPay=dec(basicWorked)*S("basicRate");
-  const otPay=dec(otMins)*S("otRate");
-  const satPay=dec(satPaid)*S("satRate");
-  const sunPay=dec(sunPaid)*S("sunRate");
-  const bhwPay=dec(bhWorkedPaid)*S("sunRate");
-  const nightPay=nights*S("nightOut");
-  const mealPay=nights*S("meal");
+  const holPay=dec(holBasic)*S("basicRate",AT);
+  const basicPay=dec(basicWorked)*S("basicRate",AT);
+  const otPay=dec(otMins)*S("otRate",AT);
+  const satPay=dec(satPaid)*S("satRate",AT);
+  const sunPay=dec(sunPaid)*S("sunRate",AT);
+  const bhwPay=dec(bhWorkedPaid)*S("sunRate",AT);
+  const nightPay=nights*S("nightOut",AT);
+  const mealPay=nights*S("meal",AT);
   /* the allowance needs every weekday covered. days still to come are not
      "covered" yet, so it is not counted until the week is done — otherwise
      Monday's take-home claims £50 that has not been earned. */
   const attEarned=attMissed.length===0 && attPending.length===0;
-  const attPay=attEarned?S("attendance"):0;
+  const attPay=attEarned?S("attendance",AT):0;
   /* typed figure wins — it is off the slip. with nothing typed, predict from
      the daily rate, but only once he has set one. blank rate predicts nothing
      rather than inventing a number he has not confirmed. */
-  const sickRate=Number(S("sickRate"))||0;
+  const sickRate=Number(S("sickRate",AT))||0;
   const sspPred=r2(sickDays*sickRate);
   const expenses=r2(expP/100);
   const sspTyped=(wk.ssp!==undefined && wk.ssp!=="") ? (Number(wk.ssp)||0) : null;
@@ -1226,7 +1309,7 @@ function calc(monKey, skip){
   push("sat","Saturday OT",dec(satPaid).toFixed(2),satPay);
   push("sun","Sunday",dec(sunPaid).toFixed(2),sunPay);
   push("bhw","Bank holiday worked",dec(bhWorkedPaid).toFixed(2),bhwPay);
-  push("nights","Night out + meal",nights,nightPay+mealPay);
+  push("nights",nightLabel(AT),nights,nightPay+mealPay);
   push("att","Attendance allowance","",attPay);
   push("ssp","SSP (sick pay)",sickDays?sickDays:"",ssp);
   push("exp","Expenses",expItems.length,expenses);
@@ -1347,33 +1430,36 @@ const PL_LINES=[
   ["sat","Saturday OT","h","satRate"],
   ["sun","Sunday","h","sunRate"],
   ["bhw","Bank holiday worked","h","sunRate"],
-  ["nights","Night out + meal","n",null],
+  ["nights","Night out + meal","n",null],   /* label re-read per week — see plLabel */
   ["att","Attendance allowance","yn",null],
   ["ssp","SSP (sick pay)","£",null],
   ["exp","Expenses","£",null]
 ];
 const PL_HOURLY=["basic","hol","ot","sat","sun","bhw"];
+/* the nights line is called different things by different employers — one
+   payment, or a night out with a meal voucher beside it */
+function plLabel(key,label,ds){ return key==="nights" ? nightLabel(ds) : label; }
 function plExpected(k,c){
-  const w=load().weeks[k]||{};
+  const w=load().weeks[k]||{}, AT=k;
   const e={};
-  e.basic ={units:dec(c.basicWorked),    cash:dec(c.basicWorked)*S("basicRate")};
-  e.hol   ={units:dec(c.holBasic),       cash:dec(c.holBasic)*S("basicRate")};
-  e.ot    ={units:dec(c.otMins),         cash:dec(c.otMins)*S("otRate")};
-  e.sat   ={units:dec(c.satPaid),        cash:dec(c.satPaid)*S("satRate")};
-  e.sun   ={units:dec(c.sunPaid),        cash:dec(c.sunPaid)*S("sunRate")};
-  e.bhw   ={units:dec(c.bhWorkedPaid),   cash:dec(c.bhWorkedPaid)*S("sunRate")};
-  e.nights={units:c.nights,              cash:c.nights*(S("nightOut")+S("meal"))};
+  e.basic ={units:dec(c.basicWorked),    cash:dec(c.basicWorked)*S("basicRate",AT)};
+  e.hol   ={units:dec(c.holBasic),       cash:dec(c.holBasic)*S("basicRate",AT)};
+  e.ot    ={units:dec(c.otMins),         cash:dec(c.otMins)*S("otRate",AT)};
+  e.sat   ={units:dec(c.satPaid),        cash:dec(c.satPaid)*S("satRate",AT)};
+  e.sun   ={units:dec(c.sunPaid),        cash:dec(c.sunPaid)*S("sunRate",AT)};
+  e.bhw   ={units:dec(c.bhWorkedPaid),   cash:dec(c.bhWorkedPaid)*S("sunRate",AT)};
+  e.nights={units:c.nights,              cash:c.nights*nightRate(AT)};
   e.att   ={units:c.attEarned?1:0,       cash:c.attPay};
   e.ssp   ={units:null,                  cash:c.ssp};
   e.exp   ={units:c.expenses,            cash:c.expenses};
   return e;
 }
-function plActualCash(key,raw){
+function plActualCash(key,raw,AT){
   if(raw===null) return null;
   const def=PL_LINES.find(l=>l[0]===key);
-  if(def[2]==="h")  return raw*S(def[3]);
-  if(def[2]==="n")  return raw*(S("nightOut")+S("meal"));
-  if(def[2]==="yn") return raw?S("attendance"):0;
+  if(def[2]==="h")  return raw*S(def[3],AT);
+  if(def[2]==="n")  return raw*nightRate(AT);
+  if(def[2]==="yn") return raw?S("attendance",AT):0;
   return raw;
 }
 function plSaved(k){ return (load().weeks[k]||{}).payslip||{}; }
@@ -1385,7 +1471,7 @@ function plGapSource(k,c){
   const p=plSaved(k), e=plExpected(k,c), out=[];
   PL_LINES.forEach(([key,label])=>{
     const raw=num(p[key]); if(raw===null) return;
-    const g=plActualCash(key,raw)-e[key].cash;
+    const g=plActualCash(key,raw,k)-e[key].cash;
     if(Math.abs(g)>=0.01) out.push({label,g});
   });
   if(!out.length) return "";
@@ -1398,7 +1484,7 @@ function plTotals(k,c){
   let expH=0, slipH=0, expPay=0, slipPay=0;
   PL_LINES.forEach(([key,,unit])=>{
     const raw=num(p[key]);
-    const theirs = raw===null ? e[key].cash : plActualCash(key,raw);
+    const theirs = raw===null ? e[key].cash : plActualCash(key,raw,k);
     expPay+=e[key].cash; slipPay+=theirs;
     if(unit==="h"){
       expH+=e[key].units;
@@ -1496,7 +1582,7 @@ function plStep(w,inSt){
       /* attendance is one a week, £50, so a missed one can never come back
          through this line. it only clears by being paid twice on a later
          slip, or by being written off. */
-      const A=S("attendance"), raw=num(p[key]);
+      const A=S("attendance",w), raw=num(p[key]);
       const paid = raw===null ? (e[key].units===1) : (raw===1);
       if(e[key].units===1 && !paid){ if(prevOwed===0) from=w; owed+=A; }
       if(wk.att2){
@@ -1799,7 +1885,7 @@ function render(){
        week's overall net-to-gross ratio quietly shaved money off them — a
        £30 night out on its own read £25.04. pay the untaxed part of the day
        through at face value and scale only what the taxman actually sees. */
-    const untaxed = x => x.nights*(S("nightOut")+S("meal")) + x.expenses;
+    const untaxed = x => x.nights*nightRate(cur()) + x.expenses;
     const dayFree = untaxed(c)-untaxed(cx);
     const weekTaxed = c.beforePension-untaxed(c);
     const keepRate = weekTaxed>0 ? (c.net-untaxed(c))/weekTaxed : 1;
@@ -1940,15 +2026,15 @@ function renderDay(c){
       <p class="note">The daily rest has to start within 24 hours of the last one ending, so the longer shift only works if you cut the rest after it.</p>`;
   }
 
-  const sickRate=Number(S("sickRate"))||0;
+  const sickRate=Number(S("sickRate",curDay))||0;
   const sickHint = sickRate
     ? "pays £"+n2(sickRate)+" — still a missed day for the £50"
     : "no rate set — still a missed day for the £50";
 
   box.innerHTML=`
     ${r.sick&&!worked?`<p class="note" style="margin-top:14px">Off sick. ${sickRate?"It pays £"+n2(sickRate)+" for the day.":"No daily rate is set, so nothing is predicted — type what the slip says on the week view."} It does <b>not</b> keep your attendance allowance.</p>`:""}
-    ${isBH?`<p class="note" style="margin-top:14px">Bank holiday. Leave it blank and it pays ${S("bhHours")} hours at the basic rate. Put times in and it pays at the Sunday rate instead, minimum ${S("sunMin")} hours.${curDay>iso(new Date())&&worked===0?` <b>Not in the week total yet</b> — it counts from ${shortDate(curDay)}.`:""}</p>`:""}
-    ${r.hol&&!worked?`<p class="note" style="margin-top:14px">Booked as holiday. It pays ${S("holHours")} hours at the basic rate, counts towards the 50, and keeps your attendance allowance.</p>`:""}
+    ${isBH?`<p class="note" style="margin-top:14px">Bank holiday. Leave it blank and it pays ${S("bhHours",curDay)} hours at the basic rate. Put times in and it pays at the Sunday rate instead, minimum ${S("sunMin",curDay)} hours.${curDay>iso(new Date())&&worked===0?` <b>Not in the week total yet</b> — it counts from ${shortDate(curDay)}.`:""}</p>`:""}
+    ${r.hol&&!worked?`<p class="note" style="margin-top:14px">Booked as holiday. It pays ${S("holHours",curDay)} hours at the basic rate${SMODE(curDay)==="day"?"":", counts towards the "+S("basicCap",curDay)}, and keeps your attendance allowance.</p>`:""}
     <div class="rest">
       <div class="top"><span class="nm">Rest before this shift</span>
         <span class="vv ${rt[1]}">${rb===null?"—":hm(rb)+(ri.capped?" <small>· "+hm(ri.inWin)+" counts</small>":"")}</span></div>
@@ -1980,12 +2066,12 @@ function renderDay(c){
       <div class="pf${r.sick?" off":""}">
         <span class="lb">Night out</span>
         <button class="chip nt${r.night?" on":""}"${r.sick?" disabled":""}>${r.sick?"—":r.night?"yes":"no"}</button>
-        <span class="hint">${r.sick?"not while you are off sick":"pays £"+n2(S("nightOut")+S("meal"))+" with the meal"}</span>
+        <span class="hint">${r.sick?"not while you are off sick":"pays £"+n2(nightRate(curDay))+(S("meal",curDay)>0?" with the meal":"")}</span>
       </div>
       ${canHol?`<div class="pf${worked||r.sick?" off":""}">
         <span class="lb">Holiday</span>
         <button class="chip hol${r.hol?" on":""}"${worked||r.sick?" disabled":""}>${worked||r.sick?"—":r.hol?"booked":"no"}</button>
-        <span class="hint">${worked?"clear the times to book it off":r.sick?"clear the sick tick to book it":"pays "+S("holHours")+" hours towards the 50"}</span>
+        <span class="hint">${worked?"clear the times to book it off":r.sick?"clear the sick tick to book it":"pays "+S("holHours",curDay)+" hours"+(SMODE(curDay)==="day"?" at basic":" towards the "+S("basicCap",curDay))}</span>
       </div>
       <div class="pf${worked||r.hol?" off":""}">
         <span class="lb">Sick</span>
@@ -2106,8 +2192,8 @@ function renderWeek(c){
     /* a bank holiday or holiday still ahead of us is real but not counted yet,
        so say so rather than showing pay for a day that has not happened */
     const notYet = ds>today && ((isBH&&mins===0) || isHol);
-    if(isBH&&mins===0) sub="Bank holiday · "+S("bhHours")+"h"+(notYet?" · not counted yet":" paid");
-    else if(isHol) sub="Holiday · "+S("holHours")+"h"+(notYet?" · not counted yet":" paid");
+    if(isBH&&mins===0) sub="Bank holiday · "+S("bhHours",cur())+"h"+(notYet?" · not counted yet":" paid");
+    else if(isHol) sub="Holiday · "+S("holHours",cur())+"h"+(notYet?" · not counted yet":" paid");
     else if(isSick) sub=c.sickRate?"Sick · £"+n2(c.sickRate)+" paid":"Sick · no rate set";
     else if(mins) sub=(r.start||"")+" – "+(r.end||"")+(isBH?" · bank holiday":"");
     else sub="not logged";
@@ -2118,7 +2204,7 @@ function renderWeek(c){
               + (ep?`<span class="pill ex">${penceText(ep)}</span>`:"");
     b.innerHTML=`<span class="nm"><b>${DAYNAME[i]} <span style="font-weight:400;color:var(--dim)">${shortDate(ds)}</span>${pills}</b>
       <span>${sub}</span></span>
-      <span class="hrs${(mins||(isBH&&mins===0)||isHol)&&!notYet?"":" zero"}">${mins?hm(mins):(isBH?hm(S("bhHours")*60):isHol?hm(S("holHours")*60):"—")}</span>
+      <span class="hrs${(mins||(isBH&&mins===0)||isHol)&&!notYet?"":" zero"}">${mins?hm(mins):(isBH?hm(S("bhHours",cur())*60):isHol?hm(S("holHours",cur())*60):"—")}</span>
       <span class="arw">›</span>`;
     b.addEventListener("click",()=>{ curDay=ds; switchTab("day"); window.scrollTo(0,0); });
     box.appendChild(b);
@@ -2133,7 +2219,7 @@ function renderWeek(c){
     aVal="on track"; aCls="warn";
     aNote="Still to log: "+c.attPending.map(nameOf).join(", ")+".";
   }else{
-    aVal=money(S("attendance")); aCls="ok";
+    aVal=money(S("attendance",cur())); aCls="ok";
     aNote="Every weekday covered, so the allowance is earned.";
   }
   document.getElementById("attStat").innerHTML=`<div class="stat">
@@ -2160,12 +2246,12 @@ function renderWeek(c){
 
   const bhThisWeek=wkDays.filter(ds=>BH.has(ds));
   const bits=[];
-  if(booked.length) bits.push(booked.length+(booked.length===1?" day":" days")+" booked, "+hm(booked.length*S("holHours")*60)+" paid");
+  if(booked.length) bits.push(booked.length+(booked.length===1?" day":" days")+" booked, "+hm(booked.length*S("holHours",cur())*60)+" paid");
   if(clash.length) bits.push(clash.length===1?"Monday–Friday has 1 day with hours on it, so that one is left alone":clash.length+" days have hours on them, so those are left alone");
   if(bhThisWeek.length) bits.push(bhThisWeek.length===1?"1 bank holiday here already":bhThisWeek.length+" bank holidays here already");
   holNote.textContent = bits.length
     ? bits.join(". ")+"."
-    : "Books Monday to Friday off at "+S("holHours")+" hours a day. You keep the attendance allowance, and any Saturday or Sunday still pays as normal.";
+    : "Books Monday to Friday off at "+S("holHours",cur())+" hours a day. You keep the attendance allowance, and any Saturday or Sunday still pays as normal.";
 
   holBtn.onclick=()=>{
     const dd=load();
@@ -2282,7 +2368,8 @@ function renderPayslip(c){
     + DAYSHORT[dowIndex(paydayOf(k))] + " " + shortDate(paydayOf(k))
     + `</b>. You can look, but figures cannot be entered until the slip arrives.</span></div>`;
 
-  PL_LINES.forEach(([key,label,unit,rateKey])=>{
+  PL_LINES.forEach(([key,label0,unit,rateKey])=>{
+    const label=plLabel(key,label0,k);
     const exp=e[key];
     const raw=num(p[key]);
     const cin=carryIn[key]||plBlank(), cout=carryOut[key]||plBlank();
@@ -2313,26 +2400,26 @@ function renderPayslip(c){
           seen ? (g!==0 ? "checked against the slip · does not match"
                         : (raw===null ? "checked against the slip · matches" : "checked against the slip"))
                : "tap when you have checked this against the slip"}</span></div>
-        ${g===null||g===0?"":`<div class="sub">${(g>0?"+":"−")+Math.abs(g)+" · "+(g>0?"+":"−")+money(Math.abs(g)*(S("nightOut")+S("meal")))}</div>`}`;
+        ${g===null||g===0?"":`<div class="sub">${(g>0?"+":"−")+Math.abs(g)+" · "+(g>0?"+":"−")+money(Math.abs(g)*nightRate(k))}</div>`}`;
 
     }else if(unit==="yn"){
       const paid = raw===null ? exp.units===1 : raw===1;
       const g = raw===null ? null : (raw?1:0)-exp.units;
       const twice = !!(d.weeks[k]||{}).att2;
       row.innerHTML=`
-        <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">expected ${exp.units?"yes":"no"}${owed?" +"+money(owed)+" owed":""} · ${money(exp.cash+(twice?S("attendance"):0))}</span></div>
+        <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">expected ${exp.units?"yes":"no"}${owed?" +"+money(owed)+" owed":""} · ${money(exp.cash+(twice?S("attendance",k):0))}</span></div>
         <div class="bot">
           <button class="tk${raw===null?"":(g===0?" on":" no")}" data-tgt="${exp.units?1:0}">${raw!==null&&g!==0?"&#10007;":"&#10003;"}</button>
           <button class="chip ynb${paid?" on":""}">${paid?"on the slip":"not on the slip"}</button>
           <span class="gap" style="color:${g===null?"var(--dim)":g===0?"var(--green)":"var(--red)"}">${
-            g===null?"—":g===0?"ok":(g>0?"+":"−")+money(S("attendance"))}</span>
+            g===null?"—":g===0?"ok":(g>0?"+":"−")+money(S("attendance",k))}</span>
         </div>`;
 
     }else if(unit==="h"){
       const shown = raw===null ? "" : p[key];
       const tgt   = exp.units + owed;
       const gapH  = raw===null ? null : raw-tgt;
-      const gapP  = raw===null ? null : gapH*S(rateKey);
+      const gapP  = raw===null ? null : gapH*S(rateKey,k);
       row.innerHTML=`
         <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">logged ${n2(exp.units)} h${owed?" <i class=\"owetag\">+"+n2(owed)+" owed</i>":""}</span></div>
         <div class="bot">
@@ -2344,7 +2431,7 @@ function renderPayslip(c){
           }</span>
         </div>
         ${gapH!==null&&Math.abs(gapH)>=0.005
-          ? `<div class="sub">${(gapP>0?"+":"−")+money(Math.abs(gapP))} at ${money(S(rateKey))} an hour</div>`
+          ? `<div class="sub">${(gapP>0?"+":"−")+money(Math.abs(gapP))} at ${money(S(rateKey,k))} an hour</div>`
           : ""}`;
 
     }else{
@@ -2367,7 +2454,7 @@ function renderPayslip(c){
            traced to the receipt that is missing rather than just a gap ---- */
     if(key==="exp" && c.expItems.length){
       const rawX=num(p[key]);
-      const shortP = rawX===null ? 0 : Math.round((e[key].cash-plActualCash(key,rawX))*100);
+      const shortP = rawX===null ? 0 : Math.round((e[key].cash-plActualCash(key,rawX,k))*100);
       const hit  = shortP>0 ? expMissing(c.expItems, shortP) : null;
       const pick = shortP>0 ? expRefOf(k, c.expItems, shortP) : null;
       const wrap=document.createElement("div");
@@ -2581,7 +2668,7 @@ function renderPayslip(c){
     const raw=num(p[key]);
     mine[key]=e[key].cash; mineU[key]=e[key].units;
     if(!conf(key)){ theirs[key]=null; theirsU[key]=null; return; }
-    theirs[key] = raw===null ? e[key].cash : plActualCash(key,raw);
+    theirs[key] = raw===null ? e[key].cash : plActualCash(key,raw,k);
     theirsU[key]= raw===null ? e[key].units : raw;
   });
   /* a line shows if the app expects something on it or he has checked it */
@@ -2611,7 +2698,8 @@ function renderPayslip(c){
       `<span class="c">${slipH===null?"\u2014":n2(slipH)}</span>`+
       `<span class="g" style="color:${phG===null?"var(--dim)":dcol(phG)}">${phG===null?"\u2014":dtxt(phG)}</span></div>`;
 
-  PL_LINES.forEach(([key,label,unit])=>{
+  PL_LINES.forEach(([key,label0,unit])=>{
+    const label=plLabel(key,label0,k);
     if(!live([key])) return;
     const isU = unit==="h" || unit==="n";
     const fu = v=> unit==="h" ? n2(v) : String(v);
@@ -2657,13 +2745,14 @@ function renderPayslip(c){
     .forEach(b=>b.addEventListener("click",goRates));
 
   const worst=[];
-  PL_LINES.forEach(([key,label,unit,rateKey])=>{
+  PL_LINES.forEach(([key,label0,unit,rateKey])=>{
+    const label=plLabel(key,label0,k);
     const raw=num(p[key]); if(raw===null) return;
     if(unit==="h"){
       const gh=raw-e[key].units;
-      if(Math.abs(gh)>=0.005) worst.push({label,gh,gp:gh*S(rateKey)});
+      if(Math.abs(gh)>=0.005) worst.push({label,gh,gp:gh*S(rateKey,k)});
     }else{
-      const gp=plActualCash(key,raw)-e[key].cash;
+      const gp=plActualCash(key,raw,k)-e[key].cash;
       if(Math.abs(gp)>=0.01) worst.push({label,gh:null,gp});
     }
   });
@@ -2812,11 +2901,12 @@ function outstanding(){
   const k=addDays(lastPaidWeek(),7);          /* the state after every slip so far */
   const st=plCarryIn(k);
   const out=[];
-  PL_LINES.forEach(([key,label,unit,rateKey])=>{
+  PL_LINES.forEach(([key,label0,unit,rateKey])=>{
     const o=st[key];
     if(!o || !(o.owed>0)) return;
-    const cash = unit==="h" ? o.owed*S(rateKey)
-               : unit==="n" ? o.owed*(S("nightOut")+S("meal"))
+    const label=plLabel(key,label0,o.from);
+    const cash = unit==="h" ? o.owed*S(rateKey,o.from)
+               : unit==="n" ? o.owed*nightRate(o.from)
                : o.owed;
     out.push({key, label, unit, rateKey, owed:o.owed, from:o.from, cash});
   });
@@ -2831,7 +2921,7 @@ function disputeCsv(){
       o.label,
       o.unit==="h" ? n2(o.owed) : o.unit==="\u00a3" ? n2(o.owed) : String(o.owed),
       o.unit==="h" ? "hours" : o.unit==="n" ? "nights" : "\u00a3",
-      o.unit==="h" ? n2(S(o.rateKey)) : o.unit==="n" ? n2(S("nightOut")+S("meal")) : "",
+      o.unit==="h" ? n2(S(o.rateKey,o.from)) : o.unit==="n" ? n2(nightRate(o.from)) : "",
       n2(o.cash),
       o.from ? prettyDate(o.from) : "",
       o.from || "",
@@ -2881,16 +2971,108 @@ function download(name,text,type){
 }
 
 /* ============ setup ============ */
+/* ---- how overtime is worked out, and the history of rate changes ----
+   both live in the Rates fold. the overtime rule is stored like any other
+   rate, so it belongs to an era: change jobs and the old weeks keep the old
+   rule as well as the old money. */
+function buildOtMode(el){
+  const d=load(), mode=SMODE_NOW();
+  el.innerHTML=`
+    <div class="field">
+      <label>How overtime is worked out<span class="hint">this is the rule your employer uses, not a preference</span></label>
+      <select id="otModeSel">
+        <option value="week"${mode==="week"?" selected":""}>By the week — over the threshold below</option>
+        <option value="day"${mode==="day"?" selected":""}>By the day — over a set number of hours in one day</option>
+      </select>
+    </div>
+    ${mode==="day"?`<div class="field">
+      <label>Overtime starts after<span class="hint">hours in a single weekday. Saturday and Sunday keep their own rate and do not take overtime on top.</span></label>
+      <input id="otDayIn" inputmode="decimal" value="${d.settings.otDayHours!==undefined&&d.settings.otDayHours!==""?d.settings.otDayHours:DEFAULTS.otDayHours}">
+    </div>`:""}
+    <p class="note">${mode==="day"
+      ? "Each weekday stands on its own. There is no weekly threshold at all, so the threshold below is ignored. Holiday and bank holiday hours are paid at the basic rate and never become overtime."
+      : "Weekday, bank holiday and holiday hours go into one pool. Everything past the threshold below is overtime."}</p>`;
+  el.querySelector("#otModeSel").addEventListener("change",e=>{
+    const v=e.target.value==="day"?"day":"week";
+    if(v==="day" && !confirm("Overtime by the day is a different pay rule, not a different rate.\n\nIt will change what every week is worth, including weeks already paid, unless you close off the old rates first with \u201cMy pay has changed\u201d.\n\nSwitch anyway?")){
+      e.target.value=SMODE_NOW(); return;
+    }
+    d.settings.otMode=v; save(); render();
+  });
+  const din=el.querySelector("#otDayIn");
+  if(din) din.addEventListener("change",e=>{
+    const v=e.target.value.trim();
+    if(v==="") delete d.settings.otDayHours; else d.settings.otDayHours=Number(v);
+    save(); render();
+  });
+}
+
+/* a one-line description of an era, enough to recognise it by */
+function eraSummary(r){
+  const g=k=>(r[k]===undefined||r[k]===null||r[k]==="")?DEFAULTS[k]:r[k];
+  const rule = String(g("otMode"))==="day"
+    ? "overtime over "+g("otDayHours")+"h a day"
+    : "overtime over "+g("basicCap")+"h a week";
+  const night = Number(g("meal"))>0
+    ? "\u00a3"+n2(Number(g("nightOut")))+" + \u00a3"+n2(Number(g("meal")))+" a night"
+    : "\u00a3"+n2(Number(g("nightOut"))+Number(g("meal")))+" a night";
+  return "\u00a3"+n2(Number(g("basicRate")))+" basic \u00b7 "+rule+" \u00b7 "+night;
+}
+
+function buildRateHist(el){
+  const h=rateHist();
+  if(!h.length){ el.innerHTML=""; return; }
+  el.innerHTML=`<p class="note" style="margin-top:14px"><b>Rates you used to be on.</b> Weeks ending on or before these dates are worked out with them, and always will be.</p>`+
+    h.map((e,i)=>`<div class="field"><label>Up to ${shortDate(e.to)}<span class="hint">${eraSummary(e.rates||{})}</span></label>
+      <button class="btn" data-era="${i}">Remove</button></div>`).join("");
+  el.querySelectorAll("button[data-era]").forEach(b=>b.addEventListener("click",()=>{
+    const i=Number(b.dataset.era), d=load(), e=(d.settings.rateHist||[])[i];
+    if(!e) return;
+    if(!confirm("Remove the rates ending "+shortDate(e.to)+"?\n\nEvery week they covered will be worked out at whatever rates come next instead. Weeks you have already been paid for will change.")) return;
+    d.settings.rateHist.splice(i,1);
+    if(!d.settings.rateHist.length) delete d.settings.rateHist;
+    save(); render();
+  }));
+}
+
+/* close off the current rates at a date and start a fresh set */
+function rateChangeFlow(){
+  const d=load();
+  /* default: the Sunday just gone, which is the last day of the last full week */
+  const today=iso(new Date());
+  let def=addDays(mondayOf(today),-1);
+  const ans=prompt("What was the LAST day your current rates applied to?\n\nWeeks ending on or before this date keep the figures you have now. Give it as YYYY-MM-DD.",def);
+  if(ans===null) return;
+  let to=String(ans).trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(to) || isNaN(new Date(to+"T00:00:00").getTime())){
+    alert("That is not a date I can read. It needs to look like "+def+".");
+    return;
+  }
+  /* a week is priced as a whole, so an era has to end on a Sunday */
+  const snapped=addDays(mondayOf(to),6);
+  if(snapped!==to && !confirm("Pay is worked out a week at a time, so rates change on a Monday.\n\nI will end the old rates on "+shortDate(snapped)+" and start the new ones the day after. Alright?")) return;
+  to=snapped;
+  const h=rateHist();
+  if(h.some(e=>e.to>=to)){ alert("You already have rates ending on or after "+shortDate(to)+"."); return; }
+  const rates={};
+  RATE_KEYS.forEach(k=>{ rates[k]=rawS(k,null); });
+  if(!confirm("Keeping these for every week up to "+shortDate(snapped)+":\n\n"+eraSummary(rates)+
+      "\n\nFrom "+shortDate(addDays(snapped,1))+" the boxes above take over — edit them to your new figures next.")) return;
+  d.settings.rateHist=h.concat([{to,rates}]).sort((a,b)=>a.to<b.to?-1:1);
+  save(); render();
+  alert("Done. Now change the rates above to the new ones.");
+}
+
 const SETUP_RATES=[
   ["basicRate","Basic hourly rate","first {cap} hours"],
-  ["basicCap","Basic hours threshold","hours before overtime starts"],
+  ["basicCap","Basic hours threshold","hours in the WEEK before overtime starts"],
   ["otRate","Standard overtime","weekday hours above the threshold"],
   ["satRate","Saturday rate","always overtime, outside the threshold"],
   ["satMin","Saturday minimum","hours paid even if you work less"],
   ["sunRate","Sunday rate","not confirmed — a guess until you see one"],
   ["sunMin","Sunday minimum","also used for a bank holiday you work"],
-  ["nightOut","Night out","paid with the meal, one tick"],
-  ["meal","Meal allowance","goes with every night out"],
+  ["nightOut","Night out","one tick a night"],
+  ["meal","Meal allowance","goes with every night out — set it to 0 if your night out is one payment with no voucher"],
   ["attendance","Attendance allowance","full week, no days missed"],
   ["bhHours","Bank holiday hours","paid, not worked, counts towards the threshold"],
   ["holHours","Holiday hours a day","paid, not worked, counts towards the threshold"],
@@ -3171,7 +3353,7 @@ function renderSetup(){
       if(kind==="ytd"){     el.appendChild(ytdField());     return; }
       const row=document.createElement("div");
       row.className="field";
-      row.innerHTML=`<label>${name}<span class="hint">${hint.replace("{cap}",S("basicCap"))}</span></label>
+      row.innerHTML=`<label>${name}<span class="hint">${hint.replace("{cap}",SNOW("basicCap"))}</span></label>
         <input inputmode="decimal" value="${d.settings[k]!==undefined&&d.settings[k]!==""?d.settings[k]:DEFAULTS[k]}">`;
       row.querySelector("input").addEventListener("change",e=>{
         const v=e.target.value.trim();
@@ -3181,7 +3363,9 @@ function renderSetup(){
       el.appendChild(row);
     });
   };
+  buildOtMode(document.getElementById("setOt"));
   build(SETUP_RATES,document.getElementById("setRates"));
+  buildRateHist(document.getElementById("rateHist"));
   build(SETUP_DED,document.getElementById("setDed"));
   document.getElementById("verNote").textContent =
     "Build "+BUILD+". "+
@@ -3261,6 +3445,7 @@ document.getElementById("plClear").addEventListener("click",()=>{
 });
 
 document.getElementById("expCsv").addEventListener("click",()=>download("hours-"+iso(new Date())+".csv",csv(),"text/csv"));
+document.getElementById("rateChanged").addEventListener("click",rateChangeFlow);
 document.getElementById("expDisp").addEventListener("click",()=>{
   if(!outstanding().length){ alert("Nothing is outstanding \u2014 every line has been paid or written off."); return; }
   download("owed-"+iso(new Date())+".csv",disputeCsv(),"text/csv");
