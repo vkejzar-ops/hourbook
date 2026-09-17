@@ -764,7 +764,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v28";
+const BUILD="v29";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -2113,35 +2113,52 @@ function renderDay(c){
   `;
 
   /* a row he has just added is empty by definition, so it survives; a row
-     he has emptied out is a row he wants gone, and it goes on the next edit */
-  const setExp=(list,keepBlank)=>{
+     he has emptied out is a row he wants gone, and it goes on the next edit.
+
+     every commit reads the list back out of the store rather than closing over
+     the one this render saw. two edits in quick succession — typing an amount
+     and then tapping "add another" — used to make the second one write the
+     pre-edit list and wipe the first.
+
+     quiet skips the re-render, so a keystroke can be saved without the row
+     being rebuilt under his finger and the keyboard dropping. */
+  const expNow=()=>expOf(d.days[curDay]||{});
+  const setExp=(list,keepBlank,quiet)=>{
     const rec=d.days[curDay]||(d.days[curDay]={});
     const keep=keepBlank ? list
       : list.filter(x=>(Number(x.a)||0)>0 || x.p || String(x.d||"").trim());
     if(keep.length) rec.exp=keep; else delete rec.exp;
-    save(); render();
+    save(); if(!quiet) render();
   };
-  box.querySelector(".eadd").addEventListener("click",()=>setExp(xs.concat([{a:0,d:""}]),true));
+  const expPut=(n,patch,quiet)=>{
+    const c=expNow().slice();
+    if(!c[n]) return;
+    c[n]={...c[n], ...patch};
+    setExp(c, !!quiet, quiet);
+  };
+  box.querySelector(".eadd").addEventListener("click",()=>setExp(expNow().concat([{a:0,d:""}]),true));
   box.querySelectorAll(".erow").forEach(rw=>{
     const n=Number(rw.dataset.n), amt=rw.querySelector(".eamt");
     /* fill from the right as he types, so the amount on screen is always the
        amount that will be stored — no decimal point to find, no guessing at
-       the end whether two digits meant pounds or pence. */
+       the end whether two digits meant pounds or pence.
+
+       it is also SAVED as he types. it used to be written only on change,
+       which fires on blur, so an amount he could see on screen had never
+       reached the store and leaving the tab threw it away. */
     amt.addEventListener("input",ev=>{
       ev.target.value=penceText(penceFrom(ev.target.value));
       const L=ev.target.value.length;
       try{ ev.target.setSelectionRange(L,L); }catch(e){}
+      expPut(n,{a:penceFrom(ev.target.value)},true);
     });
-    amt.addEventListener("change",ev=>{
-      const c=xs.slice(); c[n]={...c[n], a:penceFrom(ev.target.value)}; setExp(c);
-    });
+    amt.addEventListener("change",ev=>expPut(n,{a:penceFrom(ev.target.value)}));
     rw.querySelector(".epk").addEventListener("click",()=>{
-      const c=xs.slice(); c[n]={...c[n], p: c[n].p?undefined:1}; setExp(c);
+      expPut(n,{p: (expNow()[n]||{}).p?undefined:1});
     });
     const ds2=rw.querySelector(".edsc");
-    ds2.addEventListener("change",ev=>{
-      const c=xs.slice(); c[n]={...c[n], d:ev.target.value.trim()}; setExp(c);
-    });
+    ds2.addEventListener("input",ev=>expPut(n,{d:ev.target.value},true));
+    ds2.addEventListener("change",ev=>expPut(n,{d:ev.target.value.trim()}));
   });
 
   const set=(k,v)=>{ const rec=d.days[curDay]||(d.days[curDay]={}); if(v===""||v===null||v===undefined) delete rec[k]; else rec[k]=v; save(); render(); };

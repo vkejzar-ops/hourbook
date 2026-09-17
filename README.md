@@ -365,7 +365,7 @@ finish-time handler; the gov.uk fetch does not.
 
 ## Tests
 
-50 suites in `/home/claude/t/`, 1251 checks, all green as of v28. Run with
+51 suites in `/home/claude/t/`, 1280 checks, all green as of v29. Run with
 `node <file>.js`. (`dom.js` is the bootstrap and prints no count of its own.)
 
 `test.js` · `hol.js` · `new2.js` · `holui.js` · `dom.js` · `hdr.js` · `imp.js` ·
@@ -740,6 +740,30 @@ week that has not been paid.
 There are no tax or NI rows on this tab — both are display-only — so the
 question of offering a tick on an estimated figure does not arise.
 `tick.js`, 45 checks.
+
+## What v29 changed
+
+### Expenses are saved as you type them
+
+A receipt you had typed in could vanish. The amount was only written to
+storage when the box lost focus, so an amount sitting on screen had never
+actually been saved — leave the Day tab and the day was re-read from storage,
+which had never heard of it. Nothing reached the payslip either, because
+there was nothing there to reach it.
+
+Two faults behind it, both fixed:
+
+- The amount and the description now save on every keystroke, not on blur.
+  What is on screen is what is stored.
+- Each edit now reads the receipt list back out of storage instead of using
+  the copy the screen was drawn from. Typing an amount and then tapping
+  "add another" used to write the pre-edit list and wipe the amount.
+
+If you lost receipts to this, they are gone — they were never written. Worth
+re-entering any you remember before the next slip.
+
+`exppersist.js`, 29 checks, including typing and then leaving the tab without
+touching anything else, which is the sequence that lost the money.
 
 ## What v28 changed
 
