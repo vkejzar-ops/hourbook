@@ -260,6 +260,7 @@ button.eitem.pick,.eitem.pick{border-left-color:var(--amber)}
 .hist .amt span{font-size:12.5px;color:var(--dim)}
 .hist .wk span .ok{color:var(--green)}
 .hist .wk span .bad{color:var(--red)}
+.hist.on .wk b{color:var(--amber)}
 
 .btn{
   width:100%;height:var(--tap);border:1px solid var(--rule);border-radius:9px;
@@ -280,6 +281,93 @@ nav button{flex:1;height:56px;font-size:12px;color:var(--dim);display:flex;flex-
 nav button .g{width:20px;height:2px;background:currentColor;border-radius:2px;opacity:0}
 nav button.on{color:var(--amber)}
 nav button.on .g{opacity:1}
+
+/* ---- v30: the way back from a screen that is reached from another ---- */
+.linkrow.backrow{padding:14px 0 2px;font-weight:600}
+
+/* ---- v30: drivers' hours pill on Today ----
+   the three counts that matter before a shift, and — until he clocks in —
+   the two earliest start times underneath in the same shape. tapping it
+   opens the full drivers' hours screen. */
+.hpill{display:block;width:100%;margin:14px 0 2px;background:var(--panel);
+  border:1px solid var(--rule);border-radius:26px;padding:10px 12px;text-align:center}
+.hpill .hr{display:flex;align-items:flex-start}
+.hpill .hr + .hr{margin-top:9px;padding-top:9px;border-top:1px solid var(--rule)}
+.hpill .hc{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center}
+.hpill .hc b{font-size:19px;font-weight:600;line-height:1.15;letter-spacing:-.01em}
+.hpill .hc b.warn{color:var(--amber)}
+.hpill .hc b.over{color:var(--red)}
+.hpill .hc b small{font-size:12px;font-weight:500;color:var(--dim);margin-left:3px}
+.hpill .hc span{font-size:11.5px;color:var(--dim);line-height:1.2;margin-top:3px}
+.hpill .hc.off b{color:#BAB2A4}
+.hpill .cv{flex:0 0 14px;align-self:center;color:var(--dim);font-size:18px}
+
+/* ---- v30: calendar ---- */
+.cgrid{margin-top:12px;background:var(--panel);border:1px solid var(--rule);border-radius:12px;overflow:hidden}
+.cgrid .chd,.cgrid .cwk{display:grid;grid-template-columns:repeat(7,minmax(0,1fr)) 54px}
+.cgrid .chd span{font-size:11px;font-weight:600;color:var(--dim);text-align:center;padding:7px 0}
+.cgrid .chd span:last-child{background:var(--panel-2)}
+.cgrid .cwk{border-top:1px solid var(--rule)}
+.cgrid .cell{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  min-height:56px;padding:6px 0;width:100%}
+.cgrid .cell .n{font-size:12px;color:var(--dim);line-height:18px;min-width:18px;text-align:center}
+.cgrid .cell .h{font-size:13px;font-weight:600;line-height:1.1}
+.cgrid .cell .h.hol{color:var(--amber)}
+.cgrid .cell .h.sk{font-size:11px;font-weight:500;color:var(--dim)}
+.cgrid .cell .h.z{color:#C9C1B2;font-weight:400}
+.cgrid .cell.out .n,.cgrid .cell.out .h{opacity:.4}
+.cgrid .cell.tod .n{background:var(--green);color:#FFF;border-radius:9px;padding:0 5px}
+.cgrid .cell:disabled{cursor:default}
+.cgrid .cell:not(:disabled):active{background:var(--panel-2)}
+.cgrid .wt{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:var(--panel-2);min-height:56px;width:100%}
+.cgrid .wt b{font-size:13.5px;font-weight:600}
+.cgrid .wt span{font-size:10px;color:var(--dim)}
+.cgrid .wt:disabled b{color:#BAB2A4}
+.cgrid .wt:not(:disabled):active{background:var(--rule)}
+
+/* ---- v30: past paydays, two-tier on both sides ---- */
+.hist .wk b,.hist .amt b{font-size:16px}
+.hist .amt b{color:var(--amber);font-weight:600}
+.hist .cvr{color:var(--dim);font-size:18px;margin-left:2px}
+
+/* ---- v30: settings as a short list of doors ---- */
+.sgrp{margin-top:18px}
+.sgrp h2{margin:0 0 7px}
+.sgrp .sec{background:var(--panel);border:1px solid var(--rule);border-radius:12px;padding:0 14px}
+.srow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  padding:13px 0;border-bottom:1px solid var(--rule);font-size:15px}
+.sec .srow:last-child{border-bottom:0}
+.srow .v{margin-left:auto;color:var(--dim);font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%}
+.srow .cv{color:var(--dim);font-size:18px}
+.srow.danger{color:var(--red)}
+.door h2.dt{font-size:20px;color:var(--text);margin:8px 0 6px;letter-spacing:0}
+.door .fold > h2{display:none}
+
+/* ---- v30: receipt icon, sheet, toast ---- */
+.rc{flex:0 0 auto;width:44px;height:var(--tap);border:1px dashed var(--rule);border-radius:9px;
+  background:var(--panel);color:var(--dim);display:inline-flex;align-items:center;justify-content:center;padding:0}
+.rc svg{width:20px;height:20px}
+.rc.has{background:var(--amber);border:1px solid var(--amber);color:#FFF}
+.rc.sm{width:34px;height:34px;border-radius:8px}
+.rc.sm svg{width:17px;height:17px}
+.rc.off,.rc:disabled{border:1px solid var(--rule);background:var(--ground);color:#C9C1B2;cursor:default}
+.eline{display:flex;align-items:center;gap:8px}
+.eline > .eitem{flex:1 1 auto;min-width:0}
+.strip .rc.sm{margin-left:8px;vertical-align:middle}
+#rcSheet{position:fixed;inset:0;z-index:60;background:rgba(20,17,12,.55);display:flex;align-items:flex-end}
+#rcSheet.hidden{display:none!important}
+#rcSheet .in{background:var(--ground);width:100%;max-height:94vh;overflow-y:auto;border-radius:16px 16px 0 0;
+  padding:16px 16px calc(18px + env(safe-area-inset-bottom))}
+.rchead{display:flex;align-items:center}
+.rchead b{font-size:17px}
+.rcx{margin-left:auto;width:44px;height:44px;font-size:26px;color:var(--dim)}
+.rcimg{background:var(--panel-2);border-radius:10px;min-height:120px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.rcimg img{display:block;max-width:100%;max-height:58vh;object-fit:contain}
+.rcacts .btn{margin-top:10px}
+#toast{position:fixed;left:18px;right:18px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:70;
+  background:var(--text);color:#FFF;border-radius:10px;padding:12px 14px;font-size:14px;text-align:center}
+#toast.hidden{display:none!important}
 
 .hidden{display:none!important}
 ::placeholder{color:#BAB2A4}
@@ -342,6 +430,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
 #tab-more summary::after{content:"+";font-size:17px;letter-spacing:0;color:var(--dim)}
 #tab-more details[open]>summary::after{content:"\2212"}
 #tab-more .fold{padding-bottom:14px}
+#tab-more .door .fold{padding-top:2px}
 #tab-more details h2{display:none}
 
 .rest{padding:12px 0;border-bottom:1px solid var(--rule)}
@@ -526,16 +615,16 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
     what it has been told.</p>
   <p>Four things make it closer, in the order they are worth doing:</p>
   <ul>
-    <li><b>Setup &rarr; Pay so far this tax year.</b> The biggest one by far.
+    <li><b>Settings &rarr; Tax &amp; deductions &rarr; Pay so far this tax year.</b> The biggest one by far.
       Take the year-to-date boxes off your latest payslip, or off a P45.
       Without it the app guesses your tax from the weeks it can see, and early
       on that is not many.</li>
-    <li><b>Setup &rarr; your tax code</b>, off a real payslip. It assumes the
+    <li><b>Settings &rarr; Tax &amp; deductions &rarr; your tax code</b>, off a real payslip. It assumes the
       standard code until you tell it otherwise, and it cannot check the one
       you type.</li>
-    <li><b>Setup &rarr; rates, student loan, Medicash, pension.</b> They are
+    <li><b>Settings &rarr; pay rates, student loan, Medicash, pension.</b> They are
       all editable because not everyone is on the same ones.</li>
-    <li><b>The Payslip tab</b>, once a slip actually lands. Put the real
+    <li><b>The Payday tab</b>, once a slip actually lands. Put the real
       numbers in and it will tell you where it differs.</li>
   </ul>
   <p class="warn">This is not payroll and it is not tax advice. Your payslip is
@@ -550,7 +639,13 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
     <div id="dayBody"></div>
   </section>
 
+  <section id="tab-cal" class="hidden">
+    <div id="calGrid"></div>
+    <p class="note" id="calNote">Hours are rounded to the nearest quarter. Tap a day to open it, or a week total to see that week.</p>
+  </section>
+
   <section id="tab-week" class="hidden">
+    <button class="linkrow backrow" id="backCal">&lsaquo; Calendar</button>
     <div id="days"></div>
     <h2>Week extras</h2>
     <div id="attStat"></div>
@@ -565,6 +660,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
   </section>
 
   <section id="tab-hours" class="hidden">
+    <button class="linkrow backrow" id="backDay">&lsaquo; Today</button>
     <h2>This week</h2>
     <div id="dhWeek"></div>
     <h2>Rest</h2>
@@ -582,17 +678,15 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
     <p class="note" id="plNote"></p>
     <button class="btn" id="plAll">&#10003; Everything matches — fill the slip in</button>
     <button class="btn" id="plClear">Clear this week's payslip</button>
-  </section>
-
-  <section id="tab-history" class="hidden">
-    <h2>Weeks logged</h2>
+    <h2>Past paydays</h2>
     <div id="histList"></div>
     <p class="note" id="histNote"></p>
   </section>
 
   <section id="tab-more" class="hidden">
-    <details open>
-      <summary>Backup</summary>
+    <div id="setList"></div>
+    <button class="linkrow backrow hidden" id="doorBack">&lsaquo; Settings</button>
+    <div class="door hidden" data-door="backup" data-title="Backup">
       <div class="fold">
     <button class="btn" id="expJson">Download backup file</button>
     <button class="btn" id="impJson">Restore from backup</button>
@@ -610,10 +704,9 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
     </div>
     <p class="note" id="bkNote"></p>
       </div>
-    </details>
+    </div>
 
-    <details>
-      <summary>Export</summary>
+    <div class="door hidden" data-door="export" data-title="Export">
       <div class="fold">
     <button class="btn" id="expCsv">Download every day as CSV</button>
     <button class="btn" id="copyCsv">Copy CSV to clipboard</button>
@@ -621,10 +714,9 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
     <button class="btn" id="expDisp">Download what is still owed</button>
     <p class="note">A short sheet of everything still outstanding — which line, how much, and the week it should have been paid. Anything you have written off is already left out. This is the one to send to payroll.</p>
       </div>
-    </details>
+    </div>
 
-    <details>
-      <summary>Rates</summary>
+    <div class="door hidden" data-door="rates" data-title="Pay rates">
       <div class="fold">
         <div id="setOt"></div>
         <div id="setRates"></div>
@@ -632,41 +724,65 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
         <p class="note">Use this the day your rates change — a new job, or a rise. The figures above are kept as they are for every week up to the date you give, so weeks you have already been paid for stay exactly as they were paid. From the Monday after, the boxes above are what counts, and you edit them to the new ones.</p>
         <div id="rateHist"></div>
       </div>
-    </details>
+    </div>
 
-    <details>
-      <summary>Deductions</summary>
+    <div class="door hidden" data-door="ded" data-title="Tax &amp; deductions">
       <div class="fold">
         <div id="setDed"></div>
         <p class="note">The pension is 5% of qualifying earnings — hours and SSP, but not night out, meal or the attendance allowance — and only the slice between the two limits. National Insurance is the main rate up to the upper limit, then the lower rate above it.</p>
       </div>
-    </details>
+    </div>
 
-    <details>
-      <summary>Bank holidays</summary>
+    <div class="door hidden" data-door="bh" data-title="Bank holidays">
       <div class="fold">
     <button class="btn" id="bhCheck">Check gov.uk now</button>
     <p class="note" id="bhNote"></p>
       </div>
-    </details>
+    </div>
 
-    <details>
-      <summary>Everything else</summary>
+    <div class="door hidden" data-door="receipts" data-title="Receipts">
       <div class="fold">
+        <p class="note" id="rcNote"></p>
+        <button class="btn danger" id="rcClearAll">Delete every receipt photo</button>
+      </div>
+    </div>
+
+    <div class="door hidden" data-door="erase" data-title="Erase all data">
+      <div class="fold">
+    <p class="note">This takes every day, every payslip, your rates and every receipt photo off this phone. Download a backup first if there is anything you want to keep.</p>
     <button class="btn danger" id="wipe">Erase all data</button>
+      </div>
+    </div>
+
+    <div class="door hidden" data-door="about" data-title="About Hourbook">
+      <div class="fold">
     <p class="note" id="verNote"></p>
       </div>
-    </details>
+    </div>
   </section>
 </main>
 
 <nav>
-  <button data-tab="day" class="on"><span class="g"></span>Day</button>
-  <button data-tab="hours"><span class="g"></span>Hours</button>
-  <button data-tab="pay"><span class="g"></span>Payslip</button>
-  <button data-tab="history"><span class="g"></span>History</button>
-  <button data-tab="more"><span class="g"></span>More</button>
+  <button data-tab="day" class="on"><span class="g"></span>Today</button>
+  <button data-tab="cal"><span class="g"></span>Calendar</button>
+  <button data-tab="pay"><span class="g"></span>Payday</button>
+  <button data-tab="more"><span class="g"></span>Settings</button>
 </nav>
+
+<div id="rcSheet" class="hidden" role="dialog" aria-modal="true" aria-label="Receipt">
+  <div class="in">
+    <div class="rchead"><b id="rcTitle">Receipt</b><button class="rcx" id="rcClose" aria-label="Close">&times;</button></div>
+    <p class="note" id="rcSub"></p>
+    <div class="rcimg"><img id="rcImg" alt="Receipt photo"></div>
+    <div class="rcacts">
+      <button class="btn primary" id="rcSave">Download</button>
+      <button class="btn" id="rcRetake">Retake</button>
+      <button class="btn danger" id="rcDel">Remove photo</button>
+    </div>
+  </div>
+</div>
+<input type="file" id="rcFile" accept="image/*" capture="environment" class="hidden">
+<div id="toast" class="hidden"></div>
 
 <script>
 "use strict";
@@ -764,7 +880,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v29";
+const BUILD="v30";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -1632,6 +1748,12 @@ function plStep(w,inSt){
 let curDay = iso(new Date());
 const cur = () => mondayOf(curDay);
 let tab = "day";
+let calMonth = null;  /* "YYYY-MM" the calendar is showing */
+let door = null;      /* which settings screen is open, null for the list */
+const monthKey = ds => ds.slice(0,7);
+function shiftMonth(mk,n){ const d=new Date(+mk.slice(0,4),+mk.slice(5,7)-1+n,1); return iso(d).slice(0,7); }
+const MONTHNAME=["January","February","March","April","May","June","July","August","September","October","November","December"];
+function calCur(){ if(!calMonth) calMonth=monthKey(curDay); return calMonth; }
 let plWeek = null;   /* payslip tab tracks its own week, set on first render */
 function plCur(){ if(!plWeek) plWeek=lastPaidWeek(); return plWeek; }
 
@@ -1830,6 +1952,14 @@ function render(){
   if(tab==="day"){
     T.textContent=DAYNAME[dowIndex(curDay)];
     U.textContent=shortDate(curDay)+(curDay===iso(new Date())?" · today":"");
+  }else if(tab==="cal"){
+    const mk=calCur();
+    T.textContent=MONTHNAME[+mk.slice(5,7)-1]+" "+mk.slice(0,4);
+    U.textContent=mk===monthKey(iso(new Date()))?"this month":"tap here for this month";
+  }else if(tab==="more"){
+    const dEl=door?document.querySelector('.door[data-door="'+door+'"]'):null;
+    T.textContent=dEl?dEl.dataset.title:"Settings";
+    U.textContent="everything stays on this phone";
   }else if(tab==="pay"){
     T.textContent=shortDate(plCur())+" – "+shortDate(addDays(plCur(),6));
     U.textContent=paydayLabel(plCur());
@@ -1847,6 +1977,7 @@ function render(){
   const here = tab==="day"     ? curDay===iso(new Date())
              : tab==="week"    ? cur()===mondayOf(iso(new Date()))
              : tab==="pay"     ? plCur()===lastPaidWeek()
+             : tab==="cal"     ? calCur()===monthKey(iso(new Date()))
              : false;
   TB.classList.toggle("here", here);
   TB.style.visibility = tab==="history" ? "hidden" : "visible";
@@ -1854,8 +1985,8 @@ function render(){
   /* arrows: none on history. forward stops at the last payday on the payslip
      tab, and at the end of next week on the day and week tabs. */
   const P=document.getElementById("prev"), N=document.getElementById("next");
-  P.style.visibility = tab==="history" ? "hidden" : "visible";
-  N.style.visibility = tab==="history" ? "hidden" : "visible";
+  P.style.visibility = (tab==="history"||tab==="more") ? "hidden" : "visible";
+  N.style.visibility = (tab==="history"||tab==="more") ? "hidden" : "visible";
   N.disabled = navAtEnd();
   N.style.opacity = N.disabled ? ".35" : "1";
 
@@ -1903,6 +2034,17 @@ function render(){
     sub.textContent = c.hasData ? "" : "nothing logged this week yet";
     sub.style.display = sub.textContent ? "" : "none";
     strip.innerHTML="";
+  }else if(tab==="cal"){
+    const ms=calMonthStats(calCur());
+    fig.className="fig two";
+    fig.innerHTML=
+      "<span class=\"f\"><span class=\"n\">"+(ms.mins?qh(ms.mins):"\u2014")+"</span>"+
+        "<span class=\"lbl\">hours this month</span></span>"+
+      "<span class=\"f r\"><span class=\"n\">"+(ms.n?money2(ms.net):"\u2014")+"</span>"+
+        (ms.n?"<span class=\"estb\">estimate</span>":"")+
+        "<span class=\"lbl\">take home, paydays this month</span></span>";
+    sub.textContent=""; sub.style.display="none";
+    strip.innerHTML="";
   }else if(tab==="pay"){
     const pc=calc(plCur()), t=plTotals(plCur(),pc);
     const gap=t.slipPay-t.expPay, gh=t.slipH-t.expH;
@@ -1948,9 +2090,10 @@ function render(){
   if(tab==="day")     renderDay(c);
   if(tab==="week"){   renderWeek(c); renderLedger(c); }
   if(tab==="hours")   renderHours(c);
-  if(tab==="pay")     renderPayslip(calc(plCur()));
+  if(tab==="cal")     renderCal();
+  if(tab==="pay"){    renderPayslip(calc(plCur())); renderHistory(); }
   if(tab==="history") renderHistory();
-  if(tab==="more"){   renderSetup(); renderBackup(); renderBH(); }
+  if(tab==="more"){   renderSetup(); renderBackup(); renderBH(); renderReceiptsDoor(); renderSetList(); }
 }
 
 /* ============ day view ============ */
@@ -2026,15 +2169,59 @@ function renderDay(c){
       <p class="note">The daily rest has to start within 24 hours of the last one ending, so the longer shift only works if you cut the rest after it.</p>`;
   }
 
+  /* ---- the drivers' hours pill ----
+     top row: what is left of the three limits that decide a shift.
+     bottom row, only until he clocks in: the earliest he can start today,
+     off the back of the last shift's finish. it goes once there is a start
+     time, because by then it has been answered. */
+  const prevWk=calc(addDays(cur(),-7));
+  const driveLeft=Math.max(0,Math.min(56*60-c.driveMins, 90*60-(c.driveMins+prevWk.driveMins)));
+  const redLeft=Math.max(0,3-redUsed), tenLeft=Math.max(0,2-c.extDrive);
+  const pc=(v,lbl,cls)=>`<span class="hc"><b class="${cls||""}">${v}</b><span>${lbl}</span></span>`;
+  let startRow="";
+  if(parseHHMM(r.start)===null){
+    for(let j=1;j<=21;j++){
+      const p=addDays(curDay,-j), pr=d.days[p]||{}, en=endMs(p,pr);
+      if(en===null) continue;
+      const ps=startMs(p,pr);
+      const avail=Math.round((ps+24*3600000-en)/60000);
+      const dayStart=fromIso(curDay).getTime();
+      if(en+11*3600000>dayStart){
+        const tm=ms=>{ const dt=new Date(ms);
+          const t=String(dt.getHours()).padStart(2,"0")+":"+String(dt.getMinutes()).padStart(2,"0");
+          return iso(dt)===curDay ? t : t+"<small>"+SHORTDAY[dowIndex(iso(dt))]+"</small>"; };
+        const redOk = avail>=9*60 && nineLeft;
+        const fullOk = avail>=11*60;
+        startRow=`<span class="hr">
+          <span class="hc${redOk?"":" off"}"><b>${avail>=9*60?tm(en+9*3600000):"\u2014"}</b><span>${nineLeft?"reduced rest":"no reduced left"}</span></span>
+          <span class="hc${fullOk?"":" off"}"><b>${fullOk?tm(en+11*3600000):"\u2014"}</b><span>full rest</span></span>
+        </span>`;
+      }
+      break;
+    }
+  }
+  const pill=`<button class="hpill" id="hPill" aria-label="Drivers' hours">
+    <span class="hr">
+      ${pc(redLeft,"reduced rests left",redLeft?"":"over")}
+      ${pc(tenLeft,"10-hour drives left",tenLeft?"":"warn")}
+      ${pc(hm(driveLeft),"driving left",driveLeft<9*60?(driveLeft?"warn":"over"):"")}
+      <span class="cv">&rsaquo;</span>
+    </span>
+    ${startRow}
+  </button>`;
+
   const sickRate=Number(S("sickRate",curDay))||0;
+  const attAmt=S("attendance",curDay);
+  const attMiss = attAmt>0 ? " — still a missed day for the £"+n2(attAmt).replace(/\.00$/,"") : "";
   const sickHint = sickRate
-    ? "pays £"+n2(sickRate)+" — still a missed day for the £50"
-    : "no rate set — still a missed day for the £50";
+    ? "pays £"+n2(sickRate)+attMiss
+    : "no rate set"+attMiss;
 
   box.innerHTML=`
-    ${r.sick&&!worked?`<p class="note" style="margin-top:14px">Off sick. ${sickRate?"It pays £"+n2(sickRate)+" for the day.":"No daily rate is set, so nothing is predicted — type what the slip says on the week view."} It does <b>not</b> keep your attendance allowance.</p>`:""}
+    ${pill}
+    ${r.sick&&!worked?`<p class="note" style="margin-top:14px">Off sick. ${sickRate?"It pays £"+n2(sickRate)+" for the day.":"No daily rate is set, so nothing is predicted — type what the slip says on the week view."}${attAmt>0?" It does <b>not</b> keep your attendance allowance.":""}</p>`:""}
     ${isBH?`<p class="note" style="margin-top:14px">Bank holiday. Leave it blank and it pays ${S("bhHours",curDay)} hours at the basic rate. Put times in and it pays at the Sunday rate instead, minimum ${S("sunMin",curDay)} hours.${curDay>iso(new Date())&&worked===0?` <b>Not in the week total yet</b> — it counts from ${shortDate(curDay)}.`:""}</p>`:""}
-    ${r.hol&&!worked?`<p class="note" style="margin-top:14px">Booked as holiday. It pays ${S("holHours",curDay)} hours at the basic rate${SMODE(curDay)==="day"?"":", counts towards the "+S("basicCap",curDay)}, and keeps your attendance allowance.</p>`:""}
+    ${r.hol&&!worked?`<p class="note" style="margin-top:14px">Booked as holiday. It pays ${S("holHours",curDay)} hours at the basic rate${SMODE(curDay)==="day"?"":", counts towards the "+S("basicCap",curDay)}${attAmt>0?", and keeps your attendance allowance":""}.</p>`:""}
     <div class="rest">
       <div class="top"><span class="nm">Rest before this shift</span>
         <span class="vv ${rt[1]}">${rb===null?"—":hm(rb)+(ri.capped?" <small>· "+hm(ri.inWin)+" counts</small>":"")}</span></div>
@@ -2086,6 +2273,7 @@ function renderDay(c){
         <input class="eamt" inputmode="numeric" value="${penceText(x.a)}">
         <button class="epk chip${x.p?" on":""}">parking</button>
         <input class="edsc" placeholder="what for" value="${x.p?"parking":esc(x.d||"")}"${x.p?" disabled":""}>
+        ${rcButton(curDay,n,true)}
       </div>`).join("")}
       <button class="eadd">+ add ${xs.length?"another":"an expense"}</button>
       ${xs.length?`<span class="hint">Type the digits &mdash; 1250 reads as \u00a312.50. Clear an amount to \u00a30.00 and tap away to remove the row.</span>`:""}
@@ -2126,8 +2314,9 @@ function renderDay(c){
   const setExp=(list,keepBlank,quiet)=>{
     const rec=d.days[curDay]||(d.days[curDay]={});
     const keep=keepBlank ? list
-      : list.filter(x=>(Number(x.a)||0)>0 || x.p || String(x.d||"").trim());
+      : list.filter(x=>(Number(x.a)||0)>0 || x.p || String(x.d||"").trim() || x.rid);
     if(keep.length) rec.exp=keep; else delete rec.exp;
+    list.filter(x=>x && x.rid && keep.indexOf(x)<0).forEach(x=>rcForget(x.rid));
     save(); if(!quiet) render();
   };
   const expPut=(n,patch,quiet)=>{
@@ -2190,6 +2379,7 @@ function renderDay(c){
     });
   });
   box.querySelector("#toWeek").addEventListener("click",()=>switchTab("week"));
+  box.querySelector("#hPill").addEventListener("click",()=>switchTab("hours"));
 }
 
 /* ============ week view ============ */
@@ -2239,9 +2429,10 @@ function renderWeek(c){
     aVal=money(S("attendance",cur())); aCls="ok";
     aNote="Every weekday covered, so the allowance is earned.";
   }
-  document.getElementById("attStat").innerHTML=`<div class="stat">
+  /* a job with no attendance allowance should not have it mentioned at all */
+  document.getElementById("attStat").innerHTML = S("attendance",cur())>0 ? `<div class="stat">
     <div class="top"><span class="name">Attendance allowance</span><span class="val ${aCls}">${aVal}</span></div>
-    <div class="note">${aNote}</div></div>`;
+    <div class="note">${aNote}</div></div>` : "";
   document.getElementById("sspIn").value=wk.ssp||"";
   document.getElementById("sspIn").placeholder = c.sspPred ? n2(c.sspPred) : "0.00";
   document.getElementById("sspHint").textContent =
@@ -2268,7 +2459,7 @@ function renderWeek(c){
   if(bhThisWeek.length) bits.push(bhThisWeek.length===1?"1 bank holiday here already":bhThisWeek.length+" bank holidays here already");
   holNote.textContent = bits.length
     ? bits.join(". ")+"."
-    : "Books Monday to Friday off at "+S("holHours",cur())+" hours a day. You keep the attendance allowance, and any Saturday or Sunday still pays as normal.";
+    : "Books Monday to Friday off at "+S("holHours",cur())+" hours a day."+(S("attendance",cur())>0?" You keep the attendance allowance, and any":" Any")+" Saturday or Sunday still pays as normal.";
 
   holBtn.onclick=()=>{
     const dd=load();
@@ -2492,7 +2683,11 @@ function renderPayslip(c){
           if(w.expRef===x.key) delete w.expRef; else w.expRef=x.key;
           save(); render();
         });
-        wrap.appendChild(li);
+        const ln=document.createElement("div");
+        ln.className="eline";
+        ln.appendChild(li);
+        ln.insertAdjacentHTML("beforeend",rcButton(x.ds,x.n,false));
+        wrap.appendChild(ln);
       });
       const tg=document.createElement("button");
       tg.className="more"; tg.type="button";
@@ -2505,11 +2700,11 @@ function renderPayslip(c){
         const note=document.createElement("p");
         note.className="note exmiss";
         note.textContent = !hit
-          ? "Nothing in your receipts comes to the "+penceText(shortP)+" short. They are all listed below \u2014 worth checking them off against the slip."
+          ? "Nothing in your receipts comes to the "+penceText(shortP)+" short. They are all listed below \u2014 once payroll tell you which one it was, tap it and that one carries over."
           : hit.exact
             ? (hit.items.length===1
-                ? "That is exactly "+nm(hit.items[0])+" \u2014 the receipt missing from the slip."
-                : "That is exactly "+hit.items.map(nm).join(" and ")+" \u2014 the receipts missing from the slip.")
+                ? "That is exactly "+nm(hit.items[0])+" \u2014 the receipt missing from the slip. If payroll tell you it was a different one, tap that one instead and it carries over."
+                : "That is exactly "+hit.items.map(nm).join(" and ")+" \u2014 the receipts missing from the slip. Tap the one payroll say is carrying over.")
             : "That matches "+hit.items.length+" of your receipts, so it could be any of them: "+hit.items.map(nm).join(", ")+". Tap the one the slip missed and it will be named when it is paid.";
         row.appendChild(note);
       }
@@ -2545,12 +2740,12 @@ function renderPayslip(c){
         body=`carried into next week`;
       }else if(owed>0){
         cls += unit==="yn" ? " miss" : "";
-        head=`<span class="sh">${unitTxt(owed)}</span><span class="sd">owed from ${prettyDate(cin.from||k)}${rIn?" — "+esc(rIn):""}</span>`;
+        head=`<span class="sh">${unitTxt(owed)}</span><span class="sd">owed from ${prettyDate(cin.from||k)}${rIn?" — "+esc(rIn)+rcKeyButton(cin.ref.key):""}</span>`;
         body= unit==="yn"
           ? `only ever one a week, so it cannot come back through this line`
           : `expecting <b>${unitTxt(exp.units+owed)}</b> in total — ${unitTxt(exp.units)} this week, ${unitTxt(owed)} owed`;
       }else if(cout.owed>0){
-        head=`<span class="sh">${unitTxt(cout.owed)}</span><span class="sd">short on this slip${rOut?" — "+esc(rOut):""}</span>`;
+        head=`<span class="sh">${unitTxt(cout.owed)}</span><span class="sd">short on this slip${rOut?" — "+esc(rOut)+rcKeyButton(cout.ref.key):""}</span>`;
         body=`carried into next week`;
       }else{
         cls+=" over"; acts=false;
@@ -2649,6 +2844,11 @@ function renderPayslip(c){
         +n2(S("owedThresh"))+"-hour mark, so it is not being carried forward. Worth a look at the slip.";
       row.appendChild(gn);
     }
+    /* no allowance in this job's rates: the line is worth nothing either way,
+       so it goes — unless an old week still owes or overpaid one */
+    const attGone = key==="att" && !(S("attendance",k)>0)
+                 && !(owed>0 || cin.credit>0 || cout.owed>0 || cout.credit>0);
+    if(attGone) return;
     if(live) box.appendChild(row); else { hid.appendChild(row); hidN++; }
   });
 
@@ -2824,10 +3024,11 @@ function weeksWithData(){
 }
 function renderHistory(){
   const box=document.getElementById("histList");
-  const keys=weeksWithData().filter(k=>calc(k).hasData||plHasAny(k));
+  const today=iso(new Date());
+  const keys=weeksWithData().filter(k=>paydayOf(k)<=today && (calc(k).hasData||plHasAny(k)));
   const note=document.getElementById("histNote");
   if(!keys.length){
-    box.innerHTML=`<p class="note">Nothing logged yet. Fill in a day and it will show up here.</p>`;
+    box.innerHTML=`<p class="note">No paydays yet. Once a week you have logged is paid, it shows up here.</p>`;
     if(note) note.textContent="";
     return;
   }
@@ -2845,20 +3046,21 @@ function renderHistory(){
       tail = paid<=iso(new Date()) ? "no slip checked" : "not paid yet";
     }
     const b=document.createElement("button");
-    b.className="hist";
-    b.innerHTML=`<span class="wk"><b>${shortDate(k)} – ${shortDate(addDays(k,6))}</b>
-      <span>paid ${shortDate(paid)} · <span class="${cls}">${tail}</span></span></span>
-      <span class="amt"><b>${hm(c.paidMins)}</b><span>${money(c.cash)} gross</span></span>`;
+    b.className="hist"+(k===plCur()?" on":"");
+    b.innerHTML=`<span class="wk"><b>${DAYSHORT[dowIndex(paid)]} ${shortDate(paid)}</b>
+      <span><span class="${cls}">${tail}</span></span></span>
+      <span class="amt"><b>${c.hasData?money(c.net):"\u2014"}</b><span>${qh(c.paidMins)}h</span></span>
+      <span class="cvr">&rsaquo;</span>`;
     b.addEventListener("click",()=>{ plWeek=k; switchTab("pay"); });
     box.appendChild(b);
   });
   if(note){
     const hs=histSummary();
     note.textContent = hs.off
-      ? "Tap any week to open its payslip check. "+hs.off+" of the "+hs.checked+" you have checked did not match."
+      ? "Tap a payday to check it against the slip. "+hs.off+" of the "+hs.checked+" you have checked did not match. Amounts are take-home estimates."
       : hs.checked
-        ? "Tap any week to open its payslip check. Everything you have checked so far matched."
-        : "Tap any week to open its payslip check.";
+        ? "Tap a payday to check it against the slip. Everything you have checked so far matched. Amounts are take-home estimates."
+        : "Tap a payday to check it against the slip. Amounts are take-home estimates.";
   }
 }
 
@@ -3390,22 +3592,303 @@ function renderSetup(){
     "Everything stays on this device. Tax, NI and student loan are estimates \u2014 anything marked \u201cestimate\u201d is the app working it out, not a figure anyone has paid you. The payslip is the truth. What you would query with payroll is compared in hours, never in pounds.";
 }
 
+/* ============ calendar (v30) ============
+   a month at a glance, in hours only. money appears once, at the top, as
+   the take-home of the paydays that land in the month. hours are shown as
+   decimals to the nearest quarter, because that is how the slip shows them. */
+function qh(mins){
+  const q=Math.round((Number(mins)||0)/15)/4;
+  return q%1===0 ? String(q) : q.toFixed(2).replace(/0$/,"");
+}
+/* what one day comes to, the same way the week view reads it: worked time
+   less unpaid time, or the paid hours of a bank holiday or booked holiday
+   that has already happened. a sick day says so rather than reading blank. */
+function calDay(ds){
+  const r=load().days[ds]||{}, i=dowIndex(ds), today=iso(new Date());
+  const mins=duration(r.start,r.end);
+  if(mins) return {mins:Math.max(0,mins-Math.min(mins,durMins(r.ded)||0)), kind:"w"};
+  if(BH.has(ds)&&i<5) return ds>today ? {mins:0,kind:"ahead"} : {mins:S("bhHours",ds)*60,kind:"hol"};
+  if(r.hol&&i<5&&!r.sick) return ds>today ? {mins:0,kind:"ahead"} : {mins:S("holHours",ds)*60,kind:"hol"};
+  if(r.sick&&i<5) return {mins:0,kind:"sick"};
+  return {mins:0,kind:""};
+}
+function calMonthStats(mk){
+  const first=mk+"-01", nextFirst=shiftMonth(mk,1)+"-01", lim=navLimit();
+  let mins=0;
+  for(let ds=first; ds<nextFirst; ds=addDays(ds,1)) mins+=calDay(ds).mins;
+  /* take-home that lands in this month: every week whose payday falls in it */
+  let net=0, n=0;
+  for(let k=addDays(mondayOf(first),-14); k<nextFirst; k=addDays(k,7)){
+    if(k>lim) break;
+    if(monthKey(paydayOf(k))!==mk) continue;
+    const c=calc(k);
+    if(c.hasData){ net+=c.net; n++; }
+  }
+  return {mins, net, n};
+}
+function renderCal(){
+  const mk=calCur(), first=mk+"-01", nextFirst=shiftMonth(mk,1)+"-01";
+  const today=iso(new Date()), lim=navLimit();
+  const box=document.getElementById("calGrid");
+  let h=`<div class="cgrid"><div class="chd">${SHORTDAY.map(x=>`<span>${x}</span>`).join("")}<span>week</span></div>`;
+  for(let k=mondayOf(first); k<nextFirst; k=addDays(k,7)){
+    h+=`<div class="cwk">`;
+    for(let i=0;i<7;i++){
+      const ds=addDays(k,i), cd=calDay(ds), out=monthKey(ds)!==mk;
+      const cls="cell"+(out?" out":"")+(ds===today?" tod":"");
+      const val = cd.kind==="sick" ? `<span class="h sk">sick</span>`
+                : cd.mins ? `<span class="h${cd.kind==="hol"?" hol":""}">${qh(cd.mins)}</span>`
+                : `<span class="h z">&middot;</span>`;
+      h+=`<button class="${cls}" data-ds="${ds}"${ds>lim?" disabled":""} aria-label="${DAYNAME[i]} ${shortDate(ds)}">
+        <span class="n">${fromIso(ds).getDate()}</span>${val}</button>`;
+    }
+    const ahead=k>lim, c=ahead?null:calc(k);
+    h+=`<button class="wt" data-wk="${k}"${ahead?" disabled":""} aria-label="Week of ${shortDate(k)}">
+      <b>${c&&c.hasData?qh(c.paidMins):"\u2014"}</b><span>hours</span></button></div>`;
+  }
+  h+=`</div>`;
+  box.innerHTML=h;
+  box.querySelectorAll(".cell[data-ds]").forEach(b=>b.addEventListener("click",()=>{
+    if(b.disabled) return;
+    curDay=b.dataset.ds; switchTab("day");
+  }));
+  box.querySelectorAll(".wt[data-wk]").forEach(b=>b.addEventListener("click",()=>{
+    if(b.disabled) return;
+    const k=b.dataset.wk, t=iso(new Date());
+    curDay = mondayOf(t)===k ? t : k;
+    switchTab("week");
+  }));
+}
+
+/* ============ settings list (v30) ============
+   a short list of doors. each one opens the same fields the old folds held,
+   one screen at a time; nothing about what they store has changed. */
+const SET_GROUPS=[
+  ["Your job",[["rates","Pay rates",()=>"\u00a3"+n2(SNOW("basicRate"))+" basic"]]],
+  ["Tax & deductions",[["ded","Tax code, pension, NI",()=>SS("taxCode")]]],
+  ["Calendar",[["bh","Bank holidays",()=>{ const ys=BH.years(); return ys.length?"to end of "+ys[ys.length-1]:"none loaded"; }]]],
+  ["Your data",[
+    ["backup","Backup",()=>{ const l=load().settings.lastBackup; return l?"last "+prettyDate(l):"not yet"; }],
+    ["export","Export",()=>"CSV"],
+    ["receipts","Receipts",()=>rcReady?rcCount+" of "+RC_CAP:""],
+    ["erase","Erase all data",()=>"",true]]],
+  ["About",[["about","Hourbook",()=>BUILD]]]
+];
+function renderSetList(){
+  const list=document.getElementById("setList"), back=document.getElementById("doorBack");
+  document.querySelectorAll("#tab-more .door").forEach(el=>el.classList.toggle("hidden",el.dataset.door!==door));
+  list.classList.toggle("hidden",!!door);
+  back.classList.toggle("hidden",!door);
+  if(door) return;
+  list.innerHTML=SET_GROUPS.map(([g,rows])=>`<div class="sgrp"><h2>${esc(g)}</h2><div class="sec">${
+    rows.map(([key,name,val,danger])=>{ let v=""; try{ v=val(); }catch(e){}
+      return `<button class="srow${danger?" danger":""}" data-open="${key}"><span>${esc(name)}</span><span class="v">${esc(v)}</span><span class="cv">&rsaquo;</span></button>`; }).join("")
+  }</div></div>`).join("");
+  list.querySelectorAll("[data-open]").forEach(b=>b.addEventListener("click",()=>openDoor(b.dataset.open)));
+}
+function openDoor(k){ door=k; render(); window.scrollTo(0,0); }
+
+/* ============ receipts (v30) ============
+   photos live in their own IndexedDB store, never in the hours. an expense
+   that has one carries its id as `rid`; nothing that works out pay reads it.
+   capped at RC_CAP — the oldest goes when a new one comes in — so the photos
+   can never grow into the reason Safari clears the site's storage. they are
+   not in the backup file, which stays small and text-only. */
+const RC_DB="hourbook-receipts", RC_STORE="r", RC_CAP=25;
+let rcDbP=null, rcIds=new Set(), rcReady=false, rcCount=0, rcPending=null, rcShown=null, rcUrl=null;
+function rcDb(){
+  if(rcDbP) return rcDbP;
+  rcDbP=new Promise((res,rej)=>{
+    if(!window.indexedDB){ rej(new Error("no IndexedDB")); return; }
+    const q=indexedDB.open(RC_DB,1);
+    q.onupgradeneeded=()=>{ const db=q.result; if(!db.objectStoreNames.contains(RC_STORE)) db.createObjectStore(RC_STORE,{keyPath:"id"}); };
+    q.onsuccess=()=>res(q.result);
+    q.onerror=()=>rej(q.error||new Error("could not open the receipt store"));
+  });
+  rcDbP.catch(()=>{ rcDbP=null; });
+  return rcDbP;
+}
+function rcReq(mode,fn){
+  return rcDb().then(db=>new Promise((res,rej)=>{
+    const tx=db.transaction(RC_STORE,mode), q=fn(tx.objectStore(RC_STORE));
+    let out; if(q) q.onsuccess=()=>{ out=q.result; };
+    tx.oncomplete=()=>res(out);
+    tx.onerror=tx.onabort=()=>rej(tx.error||new Error("receipt store failed"));
+  }));
+}
+const rcGet  = id  => rcReq("readonly", st=>st.get(id));
+const rcPut  = rec => rcReq("readwrite",st=>st.put(rec));
+const rcDel  = id  => rcReq("readwrite",st=>st.delete(id));
+const rcAll  = ()  => rcReq("readonly", st=>st.getAll());
+const rcWipe = ()  => rcReq("readwrite",st=>st.clear());
+function rcHas(id){ return !!id && (rcReady ? rcIds.has(id) : true); }
+function rcRidOf(ds,n){ const x=expOf(load().days[ds]||{})[n]; return x&&x.rid||null; }
+/* every rid still referenced by an expense, and where */
+function rcRefs(){
+  const m=new Map();
+  Object.keys(load().days).forEach(ds=>expOf(load().days[ds]).forEach((x,n)=>{ if(x&&x.rid) m.set(x.rid,{ds,n}); }));
+  return m;
+}
+/* the store as it stands: drop photos nothing points at, enforce the cap
+   oldest-first, and take the rid off any expense whose photo has gone. */
+function rcSync(sweep){
+  return rcAll().then(async all=>{
+    all=all||[];
+    const refs=rcRefs();
+    let live=all;
+    if(sweep && !memOnly){
+      for(const x of all) if(!refs.has(x.id)) await rcDel(x.id);
+      live=all.filter(x=>refs.has(x.id));
+    }
+    live.sort((a,b)=>(a.t||0)-(b.t||0));
+    let changed=false;
+    while(live.length>RC_CAP){
+      const o=live.shift(); await rcDel(o.id);
+      const at=refs.get(o.id);
+      const it=at?expOf(load().days[at.ds]||{})[at.n]:null;
+      if(it && it.rid===o.id){ delete it.rid; changed=true; }
+    }
+    if(changed) save();
+    rcIds=new Set(live.map(x=>x.id)); rcCount=live.filter(x=>refs.has(x.id)).length; rcReady=true;
+  });
+}
+function rcForget(id){ if(!id) return; rcIds.delete(id); rcDel(id).then(()=>rcSync(false)).then(render).catch(()=>{}); }
+const RC_SVG=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4L6 21z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>`;
+/* the one receipt icon, the same everywhere. edit = Today, where tapping an
+   empty one takes a photo. elsewhere an empty one is greyed and does nothing. */
+function rcButton(ds,n,edit){
+  const has=rcHas(rcRidOf(ds,n));
+  if(!has && !edit) return `<button class="rc sm off" type="button" disabled aria-label="No receipt photo">${RC_SVG}</button>`;
+  return `<button class="rc${edit?"":" sm"}${has?" has":""}" type="button" data-rkey="${ds}#${n}" data-edit="${edit?1:0}" aria-label="${has?"View receipt":"Add a receipt photo"}">${RC_SVG}</button>`;
+}
+function rcKeyButton(key){
+  if(!key) return "";
+  const [ds,n]=String(key).split("#");
+  return rcButton(ds,Number(n),false);
+}
+function toast(msg){
+  const t=document.getElementById("toast"); if(!t) return;
+  t.textContent=msg; t.classList.remove("hidden");
+  clearTimeout(toast.h); toast.h=setTimeout(()=>t.classList.add("hidden"),2200);
+}
+/* light compression: long side capped at 3000px, JPEG at 0.82 — roughly half
+   the size of a phone photo, still easily readable. if the browser cannot do
+   it, or it would not be smaller, the original is kept as it is. */
+function rcShrink(file){
+  return new Promise(res=>{
+    let url; try{ url=URL.createObjectURL(file); }catch(e){ res(file); return; }
+    const img=new Image();
+    const done=b=>{ try{ URL.revokeObjectURL(url); }catch(e){} res(b); };
+    img.onload=()=>{
+      try{
+        const w=img.naturalWidth, h=img.naturalHeight, M=3000, f=Math.min(1,M/Math.max(w,h));
+        if(!w||!h){ done(file); return; }
+        const cv=document.createElement("canvas");
+        cv.width=Math.round(w*f); cv.height=Math.round(h*f);
+        cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);
+        cv.toBlob(b=>done(b && b.size<file.size ? b : file),"image/jpeg",0.82);
+      }catch(e){ done(file); }
+    };
+    img.onerror=()=>done(file);
+    img.src=url;
+  });
+}
+function rcAttach(ds,n){
+  rcPending={ds,n};
+  const f=document.getElementById("rcFile");
+  f.value=""; f.click();
+}
+async function rcTake(file){
+  const at=rcPending; rcPending=null;
+  if(!file||!at) return;
+  try{
+    const blob=await rcShrink(file);
+    const x0=expOf(load().days[at.ds]||{})[at.n];
+    if(!x0){ toast("That expense has gone \u2014 nothing was saved."); return; }
+    const id="r"+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+    await rcPut({id, blob, type:blob.type||"image/jpeg", ds:at.ds, t:Date.now()});
+    const rec=load().days[at.ds], list=expOf(rec).slice(), x=list[at.n];
+    if(!x){ await rcDel(id); return; }
+    const old=x.rid;
+    list[at.n]={...x, rid:id};
+    rec.exp=list; save();
+    if(old && old!==id) await rcDel(old);
+    rcIds.add(id);
+    await rcSync(true);
+    render();
+    toast(old?"Receipt retaken":"Receipt saved");
+  }catch(e){
+    toast("Could not save the photo \u2014 "+(e&&e.message||"storage refused it"));
+  }
+}
+function rcCloseSheet(){
+  document.getElementById("rcSheet").classList.add("hidden");
+  const img=document.getElementById("rcImg"); img.removeAttribute("src");
+  if(rcUrl){ try{ URL.revokeObjectURL(rcUrl); }catch(e){} rcUrl=null; }
+  rcShown=null;
+}
+async function rcView(ds,n,edit){
+  const x=expOf(load().days[ds]||{})[n]; if(!x||!x.rid) return;
+  let rec=null; try{ rec=await rcGet(x.rid); }catch(e){}
+  if(!rec){ rcIds.delete(x.rid); render(); toast("That photo is no longer on this phone."); return; }
+  rcShown={ds,n,rec,edit};
+  if(rcUrl){ try{ URL.revokeObjectURL(rcUrl); }catch(e){} }
+  rcUrl=URL.createObjectURL(rec.blob);
+  document.getElementById("rcImg").src=rcUrl;
+  const pay=paydayOf(mondayOf(ds)), today=iso(new Date());
+  document.getElementById("rcTitle").textContent=DAYSHORT[dowIndex(ds)]+" "+shortDate(ds)+" \u00b7 "+(expLabel(x)||"expense")+" \u00b7 "+penceText(x.a);
+  document.getElementById("rcSub").textContent=(pay<=today?"Due on the ":"To be paid on the ")+DAYSHORT[dowIndex(pay)]+" "+shortDate(pay)+" payday.";
+  document.getElementById("rcRetake").classList.toggle("hidden",!edit);
+  document.getElementById("rcDel").classList.toggle("hidden",!edit);
+  document.getElementById("rcSheet").classList.remove("hidden");
+}
+async function rcDownload(){
+  if(!rcShown) return;
+  const {ds,n,rec}=rcShown, x=expOf(load().days[ds]||{})[n]||{};
+  const ext=/png/.test(rec.type)?"png":/heic/.test(rec.type)?"heic":"jpg";
+  const name="receipt-"+ds+"-"+String(expLabel(x)||"expense").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase()+"-"+penceText(x.a).replace("\u00a3","")+"."+ext;
+  try{
+    const file=new File([rec.blob],name,{type:rec.type||"image/jpeg"});
+    if(navigator.canShare && navigator.canShare({files:[file]})){ await navigator.share({files:[file]}); return; }
+  }catch(e){ if(e && e.name==="AbortError") return; }
+  const u=URL.createObjectURL(rec.blob), a=document.createElement("a");
+  a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(u),4000);
+}
+function renderReceiptsDoor(){
+  const el=document.getElementById("rcNote"); if(!el) return;
+  el.textContent = !rcReady
+    ? "Receipt photos cannot be stored in this browser."
+    : rcCount+" of "+RC_CAP+" receipt photos are on this phone. When a new one would make it more than "+RC_CAP+", the oldest goes. They are kept apart from your hours and are not in the backup file \u2014 open a receipt and tap Download to keep a copy.";
+}
+
 /* ============ wiring ============ */
-const TABS=["day","week","hours","pay","history","more"];
+const TABS=["day","cal","week","hours","pay","more"];
 function switchTab(t){
+  if(t==="history") t="pay";          /* history lives on the Payday tab now */
   tab=t;
-  /* Week is not on the bar any more — it is reached from the day view,
-     so keep Day lit while it is showing */
-  const lit = t==="week" ? "day" : t;
+  if(t!=="more") door=null;
+  /* Week is reached from the calendar, and drivers' hours from Today, so
+     the bar keeps the tab you came from lit */
+  const lit = t==="week" ? "cal" : t==="hours" ? "day" : t;
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.tab===lit));
   TABS.forEach(k=>document.getElementById("tab-"+k).classList.toggle("hidden",k!==t));
   window.scrollTo(0,0);
   render();
 }
-document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{
+  /* the bar always lands on the top of a tab: the settings list, this month */
+  door=null;
+  if(b.dataset.tab==="cal") calMonth=monthKey(iso(new Date()));
+  switchTab(b.dataset.tab);
+}));
+document.getElementById("backCal").addEventListener("click",()=>{ calMonth=monthKey(curDay); switchTab("cal"); });
+document.getElementById("backDay").addEventListener("click",()=>switchTab("day"));
+document.getElementById("doorBack").addEventListener("click",()=>{ door=null; render(); window.scrollTo(0,0); });
 /* straight from a rate warning on the payslip to the rate fields themselves */
 function goRates(){
   switchTab("more");
+  openDoor("rates");
   const el=document.getElementById("setRates");
   if(el && el.scrollIntoView) el.scrollIntoView({block:"start"});
 }
@@ -3416,20 +3899,25 @@ function goRates(){
 function navLimit(){ return addDays(mondayOf(iso(new Date())),13); }
 function navAtEnd(){
   if(tab==="pay") return plCur()>=addDays(lastPaidWeek(),7);
-  if(tab==="history") return false;
+  if(tab==="history"||tab==="more") return false;
+  if(tab==="cal") return calCur()>=monthKey(navLimit());
   return (tab==="day" ? addDays(curDay,1) : addDays(cur(),7)) > navLimit();
 }
 function stepWeekNav(dir){
   if(dir>0 && navAtEnd()) return;
   if(tab==="pay"){ plWeek=addDays(plCur(),7*dir); }
-  else if(tab==="history"){ return; }
+  else if(tab==="history"||tab==="more"){ return; }
+  else if(tab==="cal"){ calMonth=shiftMonth(calCur(),dir); }
   else { curDay=addDays(curDay,(tab==="day"?1:7)*dir); }
   render();
 }
 document.getElementById("prev").addEventListener("click",()=>stepWeekNav(-1));
 document.getElementById("next").addEventListener("click",()=>stepWeekNav(1));
 document.getElementById("todayBtn").addEventListener("click",()=>{
-  if(tab==="pay") plWeek=lastPaidWeek(); else curDay=iso(new Date());
+  if(tab==="more") return;
+  if(tab==="pay") plWeek=lastPaidWeek();
+  else if(tab==="cal") calMonth=monthKey(iso(new Date()));
+  else curDay=iso(new Date());
   render();
 });
 
@@ -3520,11 +4008,49 @@ document.getElementById("wipe").addEventListener("click",()=>{
   if(typed===null) return;
   if(typed.trim().toUpperCase()!=="ERASE"){ alert("Not erased \u2014 nothing was changed."); return; }
 
-  mem={days:{},weeks:{},settings:{}}; save(); render();
-  alert("All hours and settings erased.");
+  mem={days:{},weeks:{},settings:{}}; save();
+  door=null;
+  rcWipe().catch(()=>{}).then(()=>rcSync(false)).catch(()=>{}).then(render);
+  render();
+  alert("All hours, settings and receipt photos erased.");
+});
+
+/* ---- receipts: one handler for every receipt icon on every screen ---- */
+document.addEventListener("click",e=>{
+  const b=e.target.closest ? e.target.closest(".rc[data-rkey]") : null;
+  if(!b || b.disabled) return;
+  e.preventDefault(); e.stopPropagation();
+  const [ds,nn]=b.dataset.rkey.split("#"), n=Number(nn), edit=b.dataset.edit==="1";
+  if(rcHas(rcRidOf(ds,n))) rcView(ds,n,edit);
+  else if(edit) rcAttach(ds,n);
+},true);
+document.getElementById("rcFile").addEventListener("change",e=>{
+  const f=e.target.files&&e.target.files[0]; rcTake(f); e.target.value="";
+});
+document.getElementById("rcClose").addEventListener("click",rcCloseSheet);
+document.getElementById("rcSheet").addEventListener("click",e=>{ if(e.target.id==="rcSheet") rcCloseSheet(); });
+document.getElementById("rcSave").addEventListener("click",rcDownload);
+document.getElementById("rcRetake").addEventListener("click",()=>{
+  if(!rcShown) return; const {ds,n}=rcShown; rcCloseSheet(); rcAttach(ds,n);
+});
+document.getElementById("rcDel").addEventListener("click",()=>{
+  if(!rcShown) return;
+  const {ds,n}=rcShown, rec=load().days[ds], list=expOf(rec).slice(), x=list[n];
+  if(!x||!x.rid){ rcCloseSheet(); return; }
+  if(!confirm("Remove this receipt photo? The expense itself stays.")) return;
+  const id=x.rid, y={...x}; delete y.rid; list[n]=y; rec.exp=list; save();
+  rcCloseSheet(); rcForget(id); render(); toast("Photo removed");
+});
+document.getElementById("rcClearAll").addEventListener("click",()=>{
+  if(!rcCount){ alert("There are no receipt photos to delete."); return; }
+  if(!confirm("Delete all "+rcCount+" receipt photos from this phone? The expenses themselves stay.")) return;
+  const d=load(); Object.values(d.days).forEach(r=>expOf(r).forEach(x=>{ if(x) delete x.rid; })); save();
+  rcWipe().catch(()=>{}).then(()=>rcSync(false)).catch(()=>{}).then(render);
 });
 
 load(); render();
+/* find out which photos are really here, then draw the icons from that */
+rcSync(false).then(render).catch(()=>{ rcReady=false; });
 
 document.getElementById("bhCheck").addEventListener("click",()=>{
   const b=document.getElementById("bhCheck"), note=document.getElementById("bhNote");

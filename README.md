@@ -13,7 +13,7 @@ This file exists so a future conversation can pick the project up cold.
 
 | File | What it is |
 |---|---|
-| `index.html` | The whole app — markup, CSS and JS in one file, ~2,080 lines |
+| `index.html` | The whole app — markup, CSS and JS in one file, ~4,110 lines |
 | `sw.js` | Service worker, cache-first |
 | `icon-180.png`, `icon-192.png`, `icon-512.png`, `icon.svg` | Home-screen icons |
 | `preview-*.html` | Throwaway design mockups. **Not part of the app. Never upload these.** |
@@ -24,11 +24,11 @@ This file exists so a future conversation can pick the project up cold.
 
 ## Version discipline
 
-`const BUILD="v23"` in `index.html` and `const CACHE = "hourbook-v23"` in `sw.js`
+`const BUILD="v30"` in `index.html` and `const CACHE = "hourbook-v30"` in `sw.js`
 **must be bumped together on every change.** The test `build.js` fails if they
-drift. The build number is shown in More → Everything else.
+drift. The build number is shown in Settings → About.
 
-Current version: **v23**.
+Current version: **v30**.
 
 ---
 
@@ -47,7 +47,7 @@ and reopen it.
 **Checking what version is actually live.** The service worker is cache-first
 with `ignoreSearch:true`, so a `?v=` query string does *not* bypass it. Open the
 site in a **Safari Private tab** instead — Private mode doesn't register service
-workers, so it fetches fresh. Check More → Everything else. Saved data isn't
+workers, so it fetches fresh. Check Settings → About. Saved data isn't
 visible in Private mode and isn't touched by looking. Back in the normal tab,
 reload twice: the first load installs the new worker and wipes the old cache,
 the second serves the new file.
@@ -365,7 +365,7 @@ finish-time handler; the gov.uk fetch does not.
 
 ## Tests
 
-51 suites in `/home/claude/t/`, 1280 checks, all green as of v29. Run with
+51 suites in `/home/claude/t/`, 1280 checks, all green as of v29. **Those suites were not available for v30** (the container resets); v30 was checked with a fresh Playwright/Chromium harness instead — `t_equiv.py` (v29 vs v30 maths, 12 checks), `t_ui.py` (every tab and door, strict rates on, 85), `t_rc.py` (receipts end to end, 35). jsdom could not be installed; Playwright is preinstalled. Run with
 `node <file>.js`. (`dom.js` is the bootstrap and prints no count of its own.)
 
 `test.js` · `hol.js` · `new2.js` · `holui.js` · `dom.js` · `hdr.js` · `imp.js` ·
@@ -825,6 +825,67 @@ Tax, NI, pension and student loan are deliberately *not* era-aware. They are
 statutory, they already move with the tax year, and the real figures come off
 the slip. Changing jobs mid-year is a P45 matter and the app does not try to
 model it.
+
+## What v30 changed
+
+A layout release. **No pay, tax, carry-over or storage logic changed** — verified
+by running v29 and v30 side by side in Chromium on the same saved data and
+comparing `calc()`, `plExpected()`, `plTotals()`, `plCarryIn()`/`plStep()` for
+every week, both CSV exports, `outstanding()` and the stored JSON: byte-identical
+on four data sets (rate-era job change with £0 attendance, single era, old
+decimal driving that needs migrating, empty install).
+
+### Tabs
+Nav is **Today, Calendar, Payday, Settings** (`day`, `cal`, `pay`, `more`).
+`TABS=["day","cal","week","hours","pay","more"]`. Week detail is reached from the
+calendar (Calendar stays lit, `#backCal`); drivers' hours from the pill on Today
+(Today stays lit, `#backDay`). The History tab is gone: its list renders under
+the payslip as **Past paydays** (paydays on or before today only), and
+`switchTab("history")` redirects to `pay`.
+
+### Today
+`#hPill` is the first thing in `#dayBody`. Top row: reduced rests left
+(`reducedSinceWeekly(curDay)`), 10-hour drives left (`2-c.extDrive`), driving
+left (the lower of 56h this week and 90h across the fortnight). Second row only
+while there is no start time today: earliest start after the last shift's finish,
+reduced (+9h) then full (+11h), greyed when not available. Collapses on clock-in.
+
+### Calendar
+`calMonth` ("YYYY-MM"), `renderCal()`, `calDay(ds)`, `calMonthStats(mk)`. Day
+cells are worked time less unpaid time, or paid hours for a bank holiday /
+booked holiday that has happened; sick days say "sick". Week column is
+`calc(k).paidMins` — so a Saturday under the 5h minimum makes the week read more
+than its days. `qh(mins)` rounds to the nearest quarter: 11h42 → `11.75`.
+Money appears once, in the hero: take-home of the weeks whose payday falls in
+the month. Days/weeks past `navLimit()` are disabled.
+
+### Settings
+Grouped list (`SET_GROUPS`, `renderSetList()`), each row a door (`door`,
+`openDoor(k)`, `.door[data-door]`, `#doorBack`). Doors: rates, ded, bh, backup,
+export, receipts, erase, about. All the old field IDs are unchanged.
+
+### Attendance at £0
+With `S("attendance",week)` at 0 the allowance vanishes: Today's sick/holiday
+notes, the week's `#attStat`, the holiday-week note, and the payslip `att` line
+(unless an old week still owes or overpaid one). The Pay rates field stays —
+it is how you turn it back on. Old-era weeks at £50 still show it.
+
+### Receipts
+Photos live in IndexedDB `hourbook-receipts`, store `r`, records
+`{id, blob, type, ds, t}` — **never in localStorage**. An expense holding one
+carries `rid`; nothing in the maths reads it (v29 ignores it too, so rollback is
+safe). Cap `RC_CAP=25`, oldest by `t` dropped and its `rid` stripped
+(`rcSync`). Compression: long side ≤3000px, JPEG 0.82, original kept if not
+smaller. One icon everywhere (`rcButton`): on Today tap = camera or view; on
+Payday items and the carry-over strip it is view-only and greyed with no photo.
+Viewer offers Download (share sheet if available, else a download link),
+Retake and Remove. A row with a photo is not auto-removed when emptied — remove
+the photo first. Photos are **not** in the backup file. Erase clears them.
+`toast()` is a small bottom notice.
+
+### Known and left alone
+The day view's "Rest before this shift" card (`.rest`) is hidden by the payslip's
+`.rest{display:none}` fold rule further down the CSS. That predates v30.
 
 ## What v27 changed
 
