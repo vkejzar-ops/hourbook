@@ -285,10 +285,11 @@ nav button.on .g{opacity:1}
 /* ---- v30: the way back from a screen that is reached from another ---- */
 .linkrow.backrow{padding:14px 0 2px;font-weight:600}
 
-/* ---- v30: drivers' hours pill on Today ----
-   the three counts that matter before a shift, and — until he clocks in —
-   the two earliest start times underneath in the same shape. tapping it
-   opens the full drivers' hours screen. */
+/* ---- drivers' hours pill on Today (v30, three states since v31) ----
+   top row always: the three counts left. second row follows the shift —
+   before clock-in the two earliest start times, while clocked in nothing
+   (collapsed to the counts), after clock-out the hours worked for the shift
+   and the week. tapping it opens the full drivers' hours screen. */
 .hpill{display:block;width:100%;margin:14px 0 2px;background:var(--panel);
   border:1px solid var(--rule);border-radius:26px;padding:10px 12px;text-align:center}
 .hpill .hr{display:flex;align-items:flex-start}
@@ -300,6 +301,7 @@ nav button.on .g{opacity:1}
 .hpill .hc b small{font-size:12px;font-weight:500;color:var(--dim);margin-left:3px}
 .hpill .hc span{font-size:11.5px;color:var(--dim);line-height:1.2;margin-top:3px}
 .hpill .hc.off b{color:#BAB2A4}
+.hpill .hc b.amber{color:var(--amber)}
 .hpill .cv{flex:0 0 14px;align-self:center;color:var(--dim);font-size:18px}
 
 /* ---- v30: calendar ---- */
@@ -880,7 +882,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v30";
+const BUILD="v31";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -2200,6 +2202,16 @@ function renderDay(c){
       break;
     }
   }
+  /* v31: once clocked out the second row comes back with what the shift
+     and the week came to — it used to be a pair of cards further down. */
+  let totRow="";
+  if(worked>0 && parseHHMM(r.start)!==null && parseHHMM(r.end)!==null){
+    totRow=`<span class="hr tot">
+      <span class="hc"><b>${hm(worked)}</b><span>this shift</span></span>
+      ${dedM?`<span class="hc"><b>${hm(Math.max(0,worked-dedM))}</b><span>paid</span></span>`:""}
+      <span class="hc"><b class="amber">${hm(c.workedMins)}</b><span>this week</span></span>
+    </span>`;
+  }
   const pill=`<button class="hpill" id="hPill" aria-label="Drivers' hours">
     <span class="hr">
       ${pc(redLeft,"reduced rests left",redLeft?"":"over")}
@@ -2207,7 +2219,7 @@ function renderDay(c){
       ${pc(hm(driveLeft),"driving left",driveLeft<9*60?(driveLeft?"warn":"over"):"")}
       <span class="cv">&rsaquo;</span>
     </span>
-    ${startRow}
+    ${startRow}${totRow}
   </button>`;
 
   const sickRate=Number(S("sickRate",curDay))||0;
@@ -2291,11 +2303,6 @@ function renderDay(c){
       </div>
     </details>
 
-    <div class="cards${dedM?" three":""}">
-      <div><b>${worked?hm(worked):"—"}</b><span>on the clock</span></div>
-      ${dedM?`<div><b>${hm(Math.max(0,worked-dedM))}</b><span>paid</span></div>`:""}
-      <div><b class="amber">${hm(c.workedMins)}</b><span>week so far</span></div>
-    </div>
     ${lastBlock}${nextBlock}
     <button class="linkrow" id="toWeek">See the whole week ›</button>
   `;

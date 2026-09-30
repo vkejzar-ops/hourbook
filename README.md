@@ -24,11 +24,11 @@ This file exists so a future conversation can pick the project up cold.
 
 ## Version discipline
 
-`const BUILD="v30"` in `index.html` and `const CACHE = "hourbook-v30"` in `sw.js`
+`const BUILD="v31"` in `index.html` and `const CACHE = "hourbook-v31"` in `sw.js`
 **must be bumped together on every change.** The test `build.js` fails if they
 drift. The build number is shown in Settings → About.
 
-Current version: **v30**.
+Current version: **v31**.
 
 ---
 
@@ -365,7 +365,7 @@ finish-time handler; the gov.uk fetch does not.
 
 ## Tests
 
-51 suites in `/home/claude/t/`, 1280 checks, all green as of v29. **Those suites were not available for v30** (the container resets); v30 was checked with a fresh Playwright/Chromium harness instead — `t_equiv.py` (v29 vs v30 maths, 12 checks), `t_ui.py` (every tab and door, strict rates on, 85), `t_rc.py` (receipts end to end, 35). jsdom could not be installed; Playwright is preinstalled. Run with
+51 suites in `/home/claude/t/`, 1280 checks, all green as of v29. **Those suites were not available for v30** (the container resets); v30 was checked with a fresh Playwright/Chromium harness instead — `t_equiv.py` (v29 vs v30 maths, 12 checks), `t_ui.py` (every tab and door, strict rates on, 85), `t_rc.py` (receipts end to end, 35). v31 added `t_pill.py` (the three pill states, 15 checks); all four suites green on v31. jsdom could not be installed; Playwright is preinstalled. Run with
 `node <file>.js`. (`dom.js` is the bootstrap and prints no count of its own.)
 
 `test.js` · `hol.js` · `new2.js` · `holui.js` · `dom.js` · `hdr.js` · `imp.js` ·
@@ -825,6 +825,28 @@ Tax, NI, pension and student loan are deliberately *not* era-aware. They are
 statutory, they already move with the tax year, and the real figures come off
 the slip. Changing jobs mid-year is a P45 matter and the app does not try to
 model it.
+
+## What v31 changed
+
+Layout only on Today — no pay, tax, carry-over or storage logic touched;
+`t_equiv.py` still byte-identical against v29.
+
+### The drivers' hours pill follows the whole shift
+
+The top row (reduced rests left, 10-hour drives left, driving left) is always
+there. The second row changes with the shift:
+
+- **Before clock-in** — the two earliest start times, reduced rest and full
+  rest, as in v30.
+- **Clocked in** — no second row; the pill collapses to the counts left.
+- **Clocked out** — the row comes back with the hours worked: **this shift**
+  and **this week** (week in amber). If the day has unpaid time, a **paid**
+  cell sits between them.
+
+The pair of total cards that used to sit near the bottom of Today
+("on the clock" / "week so far") is gone — the pill replaces it. The
+"Earliest you can start again" block at the bottom stays where it is, by
+choice.
 
 ## What v30 changed
 
