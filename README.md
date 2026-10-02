@@ -24,11 +24,11 @@ This file exists so a future conversation can pick the project up cold.
 
 ## Version discipline
 
-`const BUILD="v31"` in `index.html` and `const CACHE = "hourbook-v31"` in `sw.js`
+`const BUILD="v32"` in `index.html` and `const CACHE = "hourbook-v32"` in `sw.js`
 **must be bumped together on every change.** The test `build.js` fails if they
 drift. The build number is shown in Settings → About.
 
-Current version: **v31**.
+Current version: **v32**.
 
 ---
 
@@ -365,7 +365,7 @@ finish-time handler; the gov.uk fetch does not.
 
 ## Tests
 
-51 suites in `/home/claude/t/`, 1280 checks, all green as of v29. **Those suites were not available for v30** (the container resets); v30 was checked with a fresh Playwright/Chromium harness instead — `t_equiv.py` (v29 vs v30 maths, 12 checks), `t_ui.py` (every tab and door, strict rates on, 85), `t_rc.py` (receipts end to end, 35). v31 added `t_pill.py` (the three pill states, 15 checks); all four suites green on v31. jsdom could not be installed; Playwright is preinstalled. Run with
+51 suites in `/home/claude/t/`, 1280 checks, all green as of v29. **Those suites were not available for v30** (the container resets); v30 was checked with a fresh Playwright/Chromium harness instead — `t_equiv.py` (v29 vs v30 maths, 12 checks), `t_ui.py` (every tab and door, strict rates on, 85), `t_rc.py` (receipts end to end, 35). v31 added `t_pill.py` (the three pill states, 19 checks); all four suites green on v32. jsdom could not be installed; Playwright is preinstalled. Run with
 `node <file>.js`. (`dom.js` is the bootstrap and prints no count of its own.)
 
 `test.js` · `hol.js` · `new2.js` · `holui.js` · `dom.js` · `hdr.js` · `imp.js` ·
@@ -826,7 +826,10 @@ statutory, they already move with the tax year, and the real figures come off
 the slip. Changing jobs mid-year is a P45 matter and the app does not try to
 model it.
 
-## What v31 changed
+## What v31 and v32 changed
+
+v31 shipped the pill with the clocked-in row collapsed; v32 replaced that
+with the finish times below. The two are described together.
 
 Layout only on Today — no pay, tax, carry-over or storage logic touched;
 `t_equiv.py` still byte-identical against v29.
@@ -838,15 +841,21 @@ there. The second row changes with the shift:
 
 - **Before clock-in** — the two earliest start times, reduced rest and full
   rest, as in v30.
-- **Clocked in** — no second row; the pill collapses to the counts left.
+- **Clocked in** — the latest he can finish: a **13-hour finish** and a
+  **15-hour finish** (start + 13h / + 15h, with the weekday if it runs past
+  midnight). The 15-hour cell is only shown while a reduced rest is still
+  available; with none left the row is the 13-hour finish on its own.
 - **Clocked out** — the row comes back with the hours worked: **this shift**
   and **this week** (week in amber). If the day has unpaid time, a **paid**
   cell sits between them.
 
 The pair of total cards that used to sit near the bottom of Today
 ("on the clock" / "week so far") is gone — the pill replaces it. The
-"Earliest you can start again" block at the bottom stays where it is, by
-choice.
+The old "Earliest you can start again" and "Latest you can finish" blocks
+near the bottom of Today were **removed** — the pill shows those
+figures now (finish times while clocked in; the next day's pill shows the
+earliest start in its own before-clock-in state). The underlying rest/drive
+maths is unchanged — only the duplicate display blocks went.
 
 ## What v30 changed
 

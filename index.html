@@ -882,7 +882,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v31";
+const BUILD="v32";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -2116,60 +2116,8 @@ function renderDay(c){
   const redUsed=reducedSinceWeekly(curDay);
   const nineLeft=redUsed<3;
 
-  /* once he has clocked out: earliest he can start again */
   const eMs=endMs(curDay,r), sMsToday=startMs(curDay,r);
-  let nextBlock="";
-  if(eMs!==null){
-    const at=ms=>{
-      const dt=new Date(ms);
-      const hhmm=String(dt.getHours()).padStart(2,"0")+":"+String(dt.getMinutes()).padStart(2,"0");
-      const dayGap=Math.round((fromIso(iso(dt)).getTime()-fromIso(curDay).getTime())/86400000);
-      return hhmm+(dayGap===0?" today":dayGap===1?" tomorrow":" "+shortDate(iso(dt)));
-    };
-    /* how much rest can still land inside the 24 hours from this shift's start */
-    const avail = sMsToday===null ? Infinity : Math.round((sMsToday+24*3600000-eMs)/60000);
-    if(avail>=11*60){
-      nextBlock=`
-      <h2>Earliest you can start again</h2>
-      <div class="nxt">
-        <div><b>${at(eMs+11*3600000)}</b><span>full 11-hour rest</span><small>nothing used up</small></div>
-        <div class="${nineLeft?"":"off"}"><b>${at(eMs+9*3600000)}</b><span>reduced 9-hour rest</span>
-          <small>${nineLeft?(3-redUsed)+" of 3 left":"none left"}</small></div>
-      </div>`;
-    } else if(avail>=9*60){
-      nextBlock=`
-      <h2>Earliest you can start again</h2>
-      <div class="nxt">
-        <div class="${nineLeft?"":"off"}"><b>${at(eMs+9*3600000)}</b><span>reduced rest — already used</span>
-          <small>${nineLeft?(3-redUsed)+" of 3 left":"over the three allowed"}</small></div>
-      </div>
-      <p class="note">That shift was long enough that only ${hm(avail)} of your rest falls inside the 24 hours from when you started, so it is a reduced one whatever you do now. Sleeping longer does not put it back.</p>`;
-    } else {
-      nextBlock=`
-      <h2>Earliest you can start again</h2>
-      <p class="note over">That shift ran long enough that under 9 hours of rest can fall inside the 24 hours from when you started it, so there is no legal daily rest left in this window. Check it against your tacho.</p>`;
-    }
-  }
-
-  /* once he has clocked in but not out: latest he can finish */
   const sMs=startMs(curDay,r);
-  let lastBlock="";
-  if(sMs!==null && eMs===null){
-    const at=ms=>{
-      const dt=new Date(ms);
-      const hhmm=String(dt.getHours()).padStart(2,"0")+":"+String(dt.getMinutes()).padStart(2,"0");
-      const dayGap=Math.round((fromIso(iso(dt)).getTime()-fromIso(curDay).getTime())/86400000);
-      return hhmm+(dayGap===0?" today":dayGap===1?" tomorrow":" "+shortDate(iso(dt)));
-    };
-    lastBlock=`
-      <h2>Latest you can finish</h2>
-      <div class="nxt">
-        <div><b>${at(sMs+13*3600000)}</b><span>13 hours</span><small>leaves a full 11-hour rest</small></div>
-        <div class="${nineLeft?"":"off"}"><b>${at(sMs+15*3600000)}</b><span>15 hours</span>
-          <small>${nineLeft?"uses a reduced 9":"none left"}</small></div>
-      </div>
-      <p class="note">The daily rest has to start within 24 hours of the last one ending, so the longer shift only works if you cut the rest after it.</p>`;
-  }
 
   /* ---- the drivers' hours pill ----
      top row: what is left of the three limits that decide a shift.
@@ -2202,6 +2150,19 @@ function renderDay(c){
       break;
     }
   }
+  /* v31: while clocked in, the second row shows the latest he can finish for
+     a 13h and a 15h shift, same two-column shape as the start times. the 15h
+     cell only appears if a reduced rest is still available. */
+  let finRow="";
+  if(sMs!==null && eMs===null){
+    const ft=ms=>{ const dt=new Date(ms);
+      const t=String(dt.getHours()).padStart(2,"0")+":"+String(dt.getMinutes()).padStart(2,"0");
+      return iso(dt)===curDay ? t : t+"<small>"+SHORTDAY[dowIndex(iso(dt))]+"</small>"; };
+    finRow=`<span class="hr">
+      <span class="hc"><b>${ft(sMs+13*3600000)}</b><span>13-hour finish</span></span>
+      ${nineLeft?`<span class="hc"><b>${ft(sMs+15*3600000)}</b><span>15-hour finish</span></span>`:""}
+    </span>`;
+  }
   /* v31: once clocked out the second row comes back with what the shift
      and the week came to — it used to be a pair of cards further down. */
   let totRow="";
@@ -2219,7 +2180,7 @@ function renderDay(c){
       ${pc(hm(driveLeft),"driving left",driveLeft<9*60?(driveLeft?"warn":"over"):"")}
       <span class="cv">&rsaquo;</span>
     </span>
-    ${startRow}${totRow}
+    ${startRow}${finRow}${totRow}
   </button>`;
 
   const sickRate=Number(S("sickRate",curDay))||0;
@@ -2303,7 +2264,6 @@ function renderDay(c){
       </div>
     </details>
 
-    ${lastBlock}${nextBlock}
     <button class="linkrow" id="toWeek">See the whole week ›</button>
   `;
 
