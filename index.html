@@ -319,6 +319,14 @@ nav button.on .g{opacity:1}
 .cgrid .cell .h.z{color:#C9C1B2;font-weight:400}
 .cgrid .cell.out .n,.cgrid .cell.out .h{opacity:.4}
 .cgrid .cell.tod .n{background:var(--green);color:#FFF;border-radius:9px;padding:0 5px}
+/* v33: day colours — blue holiday, orange bank holiday, red unpaid */
+.cgrid .cell.thol{background:#E3ECF7}.cgrid .cell.thol .h{color:#2F5E9E}
+.cgrid .cell.tbh{background:#FBE7D3}.cgrid .cell.tbh .h{color:#B25A12}
+.cgrid .cell.tup{background:#F6DEDA}.cgrid .cell.tup .h{color:var(--red)}
+.callegend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--dim);padding:8px 2px 0}
+.callegend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.pair.four{flex-wrap:wrap;row-gap:12px;gap:10px}
+.pair.four .pf{flex:1 1 calc(50% - 10px)}
 .cgrid .cell:disabled{cursor:default}
 .cgrid .cell:not(:disabled):active{background:var(--panel-2)}
 .cgrid .wt{display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -871,8 +879,6 @@ const DEFAULTS = {
   bhHours:10,
   holHours:10,
   sickRate:"",
-  owedThresh:1,
-  owedRound:0.25,
   backupWeeks:2,
   pensionRate:5, pensionLower:120.00, pensionUpper:967.00,
   bik:1.15, bikOn:1,
@@ -882,7 +888,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v32";
+const BUILD="v33";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -1290,7 +1296,8 @@ function calc(monKey, skip){
   const wk=d.weeks[monKey]||{};
   let weekdayMins=0, satMins=0, sunMins=0, bhWorkedPaid=0, bhWorkedMins=0;
   let dayOtMins=0;        /* daily-overtime mode: hours past the daily figure */
-  let nights=0, bhDays=0, holDays=0, sickDays=0, workedMins=0, driveMins=0, extDrive=0;
+  let nights=0, bhDays=0, holDays=0, sickDays=0, unpDays=0, workedMins=0, driveMins=0, extDrive=0;
+  let daysWorked=0;   /* any day with worked time on it — drives the rounding grace */
   let dedMins=0;
   let bhPending=0, holPending=0;
   let expP=0; const expItems=[];
@@ -1311,12 +1318,16 @@ function calc(monKey, skip){
     const pmins=mins-ded;
     /* a holiday only counts on a weekday you did not work.
        if it is also a bank holiday, the bank holiday wins — never both. */
-    const onHol = i<5 && !!r.hol && mins===0 && !BH.has(ds) && !r.sick;
+    const onHol = i<5 && !!r.hol && mins===0 && !BH.has(ds) && !r.sick && !r.unp;
     /* sick pays SSP, not hours, and — unlike holiday — does NOT save the
        attendance allowance. so it is deliberately left out of the test
        below: a sick weekday still counts as a day missed. */
-    const onSick = i<5 && !!r.sick && mins===0 && !BH.has(ds);
+    const onSick = i<5 && !!r.sick && mins===0 && !BH.has(ds) && !r.unp;
     if(onSick) sickDays++;
+    /* unpaid absence: a weekday booked off without pay. it pays nothing and
+       logs no hours — it only says why the day is empty. like sick, it is
+       still a day missed for attendance, so it is left out of that test. */
+    if(i<5 && !!r.unp && mins===0 && !BH.has(ds)) unpDays++;
     /* the ordinal within the day gives each receipt a key that survives a
        re-render, so a carried-over shortfall can be pinned to the receipt
        itself rather than to a bare amount. */
@@ -1325,6 +1336,7 @@ function calc(monKey, skip){
       expP+=a; expItems.push({ds, i, n, key:ds+"#"+n, pence:a, label:expLabel(x)});
     });
     workedMins+=mins;
+    if(mins>0) daysWorked++;
     dedMins+=ded;
     if(r.night) nights++;
 
@@ -1466,9 +1478,9 @@ function calc(monKey, skip){
 
   return {
     dates, lines:L, nights, bhDays, bhMins, bhWorkedMins, bhWorkedPaid,
-    holDays, holMins, sickDays, ssp, sspPred, sickRate, expenses, expItems,
+    holDays, holMins, sickDays, unpDays, ssp, sspPred, sickRate, expenses, expItems,
     bhPending, holPending,
-    workedMins, dedMins, paidMins:basicMins+otMins+satPaid+sunPaid+bhWorkedPaid,
+    workedMins, daysWorked, dedMins, paidMins:basicMins+otMins+satPaid+sunPaid+bhWorkedPaid,
     basicMins, basicWorked, holBasic, otMins, satPaid, sunPaid,
     beforePension, pension, pensionable, cash, taxable, tax, ni, sloan, net,
     driveMins, extDrive, redRest, shortRest, assumedDrive,
@@ -1635,13 +1647,17 @@ const PL_BACK  = 52;
    a stray 0.25 is arithmetic, not a shortfall. it is meaningless on the
    count lines: a missing night out is a whole £30 and can never be rounding,
    so nights and attendance carry any gap at all. */
-/* the grace bands are about rounding, and the only line that gets rounded is
-   standard overtime — it is quartered. Saturdays and bank holidays are whole
-   shifts at a fixed rate, so short there means something is actually wrong and
-   it carries straight away. below owedRound it is rounding and is dropped
-   silently; between the two it is still not carried, but it is worth a look. */
-function plThresh(unit,key){ return key==="ot" ? S("owedThresh") : 0; }
-function plRound(key){ return key==="ot" ? S("owedRound") : 0; }
+/* the rounding grace is about rounding, and the only line that gets rounded is
+   standard overtime — it is quartered a day at a time. Saturdays and bank
+   holidays are whole shifts at a fixed rate, so short there means something is
+   actually wrong and it carries straight away.
+   one threshold only (v33): 7.5 minutes per day worked. payroll rounding to
+   the nearest quarter-hour can move any one day by at most 7.5 min either way,
+   so that much per day is rounding and is dropped silently. anything past it is
+   a real shortfall — flagged AND carried over as owed (he can still write it
+   off). there is no middle "flagged but not carried" band any more. */
+const GRACE_PER_DAY = 7.5/60;   /* hours of grace earned per day worked */
+function plGrace(key, days){ return key==="ot" ? GRACE_PER_DAY*(days||0) : 0; }
 
 function plBlank(){ return {owed:0, from:null, credit:0, ref:null}; }
 
@@ -1693,8 +1709,7 @@ function plStep(w,inSt){
     }
 
     const prevOwed=owed;
-    const thresh=plThresh(unit,key);
-    let cred=0, graced=0;
+    let cred=0;
 
     if(unit==="yn"){
       /* attendance is one a week, £50, so a missed one can never come back
@@ -1714,15 +1729,17 @@ function plStep(w,inSt){
       if(unit==="n" && raw===null && chk.nights) val=target;   /* ticked = checked and agrees */
       if(val===null){ if(owed>0) out[key]={owed,from,credit:0,ref}; return; }
 
+      const grace = plGrace(key, cw ? cw.daysWorked : 0);
       const diff = val - target;
       if(diff>=0){
         owed=0; from=null;
-        cred = diff>=thresh ? diff : 0;
+        cred = diff>grace ? diff : 0;
       }else{
         let short=-diff;
         if(credit>0) short=Math.max(0,short-credit);   /* them taking last week's overpayment back */
-        if(short>=plRound(key) && short<thresh) graced=short;
-        if(short<thresh) short=0;
+        /* one line now: at or under the per-day grace it is rounding, dropped
+           silently; over it, it carries as owed (and the strip flags it). */
+        if(short<=grace) short=0;
         if(short>0 && prevOwed===0) from=w;
         owed=short;
         if(owed===0) from=null;
@@ -1740,8 +1757,8 @@ function plStep(w,inSt){
        a shortfall he dismisses on the same slip it appeared on was only
        being cleared from what was carried IN — which is nothing — so the
        strip stayed put and the debt rolled on regardless. */
-    if(wo[key]){ owed=0; from=null; graced=0; ref=null; }
-    if(owed>0 || cred>0 || graced>0) out[key]={owed, from, credit:cred, graced, ref};
+    if(wo[key]){ owed=0; from=null; ref=null; }
+    if(owed>0 || cred>0) out[key]={owed, from, credit:cred, ref};
   });
   return out;
 }
@@ -2024,7 +2041,7 @@ function render(){
     const keepRate = weekTaxed>0 ? (c.net-untaxed(c))/weekTaxed : 1;
     const dayNet = dayGross===null||!c.beforePension ? null
                  : dayFree + (dayGross-dayFree)*keepRate;
-    const dayLogged = mins>0 || (BH.has(curDay)&&dowIndex(curDay)<5) || !!r.hol || !!r.sick || !!r.night;
+    const dayLogged = mins>0 || (BH.has(curDay)&&dowIndex(curDay)<5) || !!r.hol || !!r.sick || !!r.unp || !!r.night;
     fig.className="fig two";
     fig.innerHTML=
       "<span class=\"f\"><span class=\"n\">"+(dayLogged&&dayNet!==null?money2(dayNet):"\u2014")+"</span>"+
@@ -2194,6 +2211,7 @@ function renderDay(c){
     ${pill}
     ${r.sick&&!worked?`<p class="note" style="margin-top:14px">Off sick. ${sickRate?"It pays £"+n2(sickRate)+" for the day.":"No daily rate is set, so nothing is predicted — type what the slip says on the week view."}${attAmt>0?" It does <b>not</b> keep your attendance allowance.":""}</p>`:""}
     ${isBH?`<p class="note" style="margin-top:14px">Bank holiday. Leave it blank and it pays ${S("bhHours",curDay)} hours at the basic rate. Put times in and it pays at the Sunday rate instead, minimum ${S("sunMin",curDay)} hours.${curDay>iso(new Date())&&worked===0?` <b>Not in the week total yet</b> — it counts from ${shortDate(curDay)}.`:""}</p>`:""}
+    ${r.unp&&!worked&&!isBH?`<p class="note" style="margin-top:14px">Unpaid absence. Nothing is paid for the day.</p>`:""}
     ${r.hol&&!worked?`<p class="note" style="margin-top:14px">Booked as holiday. It pays ${S("holHours",curDay)} hours at the basic rate${SMODE(curDay)==="day"?"":", counts towards the "+S("basicCap",curDay)}${attAmt>0?", and keeps your attendance allowance":""}.</p>`:""}
     <div class="rest">
       <div class="top"><span class="nm">Rest before this shift</span>
@@ -2222,21 +2240,26 @@ function renderDay(c){
         : "Off the tacho, in hours and minutes \u2014 0837 is 8h 37. Both are needed before the week counts the day."}</p>
     </div>
 
-    <div class="pair${canHol?" three":""}">
+    <div class="pair${canHol?" four":""}">
       <div class="pf${r.sick?" off":""}">
         <span class="lb">Night out</span>
         <button class="chip nt${r.night?" on":""}"${r.sick?" disabled":""}>${r.sick?"—":r.night?"yes":"no"}</button>
         <span class="hint">${r.sick?"not while you are off sick":"pays £"+n2(nightRate(curDay))+(S("meal",curDay)>0?" with the meal":"")}</span>
       </div>
-      ${canHol?`<div class="pf${worked||r.sick?" off":""}">
+      ${canHol?`<div class="pf${worked||r.sick||r.unp?" off":""}">
         <span class="lb">Holiday</span>
-        <button class="chip hol${r.hol?" on":""}"${worked||r.sick?" disabled":""}>${worked||r.sick?"—":r.hol?"booked":"no"}</button>
-        <span class="hint">${worked?"clear the times to book it off":r.sick?"clear the sick tick to book it":"pays "+S("holHours",curDay)+" hours"+(SMODE(curDay)==="day"?" at basic":" towards the "+S("basicCap",curDay))}</span>
+        <button class="chip hol${r.hol?" on":""}"${worked||r.sick||r.unp?" disabled":""}>${worked||r.sick||r.unp?"—":r.hol?"booked":"no"}</button>
+        <span class="hint">${worked?"clear the times to book it off":r.sick?"clear the sick tick to book it":r.unp?"marked as unpaid":"pays "+S("holHours",curDay)+" hours"+(SMODE(curDay)==="day"?" at basic":" towards the "+S("basicCap",curDay))}</span>
       </div>
-      <div class="pf${worked||r.hol?" off":""}">
+      <div class="pf${worked||r.hol||r.unp?" off":""}">
         <span class="lb">Sick</span>
-        <button class="chip sk${r.sick?" on":""}"${worked||r.hol?" disabled":""}>${worked?"—":r.hol?"—":r.sick?"sick":"no"}</button>
-        <span class="hint">${worked?"clear the times to mark it":r.hol?"booked as holiday":sickHint}</span>
+        <button class="chip sk${r.sick?" on":""}"${worked||r.hol||r.unp?" disabled":""}>${worked||r.hol||r.unp?"—":r.sick?"sick":"no"}</button>
+        <span class="hint">${worked?"clear the times to mark it":r.hol?"booked as holiday":r.unp?"marked as unpaid":sickHint}</span>
+      </div>
+      <div class="pf${worked||r.hol||r.sick?" off":""}">
+        <span class="lb">Unpaid</span>
+        <button class="chip up${r.unp?" on":""}"${worked||r.hol||r.sick?" disabled":""}>${worked||r.hol||r.sick?"—":r.unp?"unpaid":"no"}</button>
+        <span class="hint">${worked?"clear the times to mark it":r.hol?"booked as holiday":r.sick?"marked as sick":"absence, pays nothing"}</span>
       </div>`:""}
     </div>
 
@@ -2333,6 +2356,8 @@ function renderDay(c){
   if(holBtn) holBtn.addEventListener("click",()=>set("hol",r.hol?"":true));
   const skBtn=box.querySelector(".sk");
   if(skBtn) skBtn.addEventListener("click",()=>set("sick",r.sick?"":true));
+  const upBtn=box.querySelector(".up");
+  if(upBtn) upBtn.addEventListener("click",()=>set("unp",r.unp?"":true));
 
   [["dv","drive"],["ow","other"],["dd","ded"]].forEach(([cls,key])=>{
     const el=box.querySelector("."+cls);
@@ -2358,8 +2383,9 @@ function renderWeek(c){
     const isBH=BH.has(ds)&&i<5;
     const b=document.createElement("button");
     b.className="wrow"+(ds===today?" today":"");
-    const isSick = !!r.sick && mins===0 && !isBH && i<5;
-    const isHol = r.hol&&mins===0&&i<5&&!r.sick;
+    const isSick = !!r.sick && mins===0 && !isBH && i<5 && !r.unp;
+    const isHol = r.hol&&mins===0&&i<5&&!r.sick&&!r.unp;
+    const isUnp = !!r.unp&&mins===0&&i<5&&!isBH;
     /* a day with no hours should always say why, rather than reading the
        same as one he simply forgot to fill in */
     let sub;
@@ -2368,6 +2394,7 @@ function renderWeek(c){
     const notYet = ds>today && ((isBH&&mins===0) || isHol);
     if(isBH&&mins===0) sub="Bank holiday · "+S("bhHours",cur())+"h"+(notYet?" · not counted yet":" paid");
     else if(isHol) sub="Holiday · "+S("holHours",cur())+"h"+(notYet?" · not counted yet":" paid");
+    else if(isUnp) sub="Unpaid absence";
     else if(isSick) sub=c.sickRate?"Sick · £"+n2(c.sickRate)+" paid":"Sick · no rate set";
     else if(mins) sub=(r.start||"")+" – "+(r.end||"")+(isBH?" · bank holiday":"");
     else sub="not logged";
@@ -2555,10 +2582,6 @@ function renderPayslip(c){
     const owed=wroteOff?0:cin.owed, credit=cin.credit;
     const row=document.createElement("div");
     row.className="pl"+(raw===null?"":" has");
-    /* a shortfall too big to be rounding but too small to chase gets said out
-       loud, otherwise it is dropped silently and he never knows it happened. */
-    const gr=cout.graced||0;
-
     if(unit==="n"){
       /* the slider running to twelve is not arbitrary — a week they miss
          entirely is up to six, so two weeks' worth has to fit on it. */
@@ -2804,13 +2827,6 @@ function renderPayslip(c){
     const expects = unit==="£" ? exp.cash>0 : exp.units>0;
     const live = key==="nights" || key==="att" || expects || raw!==null
               || owed>0 || cin.credit>0 || cout.owed>0 || cout.credit>0;
-    if(gr>0){
-      const gn=document.createElement("p");
-      gn.className="note graced";
-      gn.textContent="Short by "+n2(gr)+" hours — too much to be rounding, but under the "
-        +n2(S("owedThresh"))+"-hour mark, so it is not being carried forward. Worth a look at the slip.";
-      row.appendChild(gn);
-    }
     /* no allowance in this job's rates: the line is worth nothing either way,
        so it goes — unless an old week still owes or overpaid one */
     const attGone = key==="att" && !(S("attendance",k)>0)
@@ -3262,9 +3278,7 @@ const SETUP_RATES=[
   ["attendance","Attendance allowance","full week, no days missed"],
   ["bhHours","Bank holiday hours","paid, not worked, counts towards the threshold"],
   ["holHours","Holiday hours a day","paid, not worked, counts towards the threshold"],
-  ["sickRate","Sick pay","","sick"],
-  ["owedRound","Rounding grace","hours — overtime short by less than this is rounding, ignored silently"],
-  ["owedThresh","Carry shortfalls over","hours — overtime short by less than this is flagged but not carried forward"]
+  ["sickRate","Sick pay","","sick"]
 ];
 const SETUP_DED=[
   ["pensionRate","Pension %","of qualifying earnings, off before tax"],
@@ -3532,6 +3546,9 @@ function renderSetup(){
   const build=(list,el)=>{
     el.innerHTML="";
     list.forEach(([k,name,hint,kind])=>{
+      /* the weekly threshold means nothing in daily-overtime mode, so it is
+         not shown at all there — only in weekly mode. */
+      if(k==="basicCap" && SMODE_NOW()==="day") return;
       if(kind==="sick"){ el.appendChild(sickField()); return; }
       if(kind==="taxcode"){ el.appendChild(taxCodeField()); return; }
       if(kind==="sloan"){   el.appendChild(sloanField());   return; }
@@ -3575,9 +3592,22 @@ function calDay(ds){
   const mins=duration(r.start,r.end);
   if(mins) return {mins:Math.max(0,mins-Math.min(mins,durMins(r.ded)||0)), kind:"w"};
   if(BH.has(ds)&&i<5) return ds>today ? {mins:0,kind:"ahead"} : {mins:S("bhHours",ds)*60,kind:"hol"};
-  if(r.hol&&i<5&&!r.sick) return ds>today ? {mins:0,kind:"ahead"} : {mins:S("holHours",ds)*60,kind:"hol"};
+  if(r.hol&&i<5&&!r.sick&&!r.unp) return ds>today ? {mins:0,kind:"ahead"} : {mins:S("holHours",ds)*60,kind:"hol"};
+  if(r.unp&&i<5) return {mins:0,kind:"unp"};
   if(r.sick&&i<5) return {mins:0,kind:"sick"};
   return {mins:0,kind:""};
+}
+/* which colour a calendar day wears: bank holiday orange, booked holiday
+   blue, unpaid absence red. green stays for today's date alone. bank
+   holidays come from the gov.uk table, so nothing is typed in for them. */
+function dayTag(ds){
+  const r=load().days[ds]||{}, i=dowIndex(ds);
+  if(i>4) return "";
+  if(BH.has(ds)) return "tbh";
+  if(duration(r.start,r.end)) return "";
+  if(r.unp) return "tup";
+  if(r.hol&&!r.sick) return "thol";
+  return "";
 }
 function calMonthStats(mk){
   const first=mk+"-01", nextFirst=shiftMonth(mk,1)+"-01", lim=navLimit();
@@ -3602,8 +3632,9 @@ function renderCal(){
     h+=`<div class="cwk">`;
     for(let i=0;i<7;i++){
       const ds=addDays(k,i), cd=calDay(ds), out=monthKey(ds)!==mk;
-      const cls="cell"+(out?" out":"")+(ds===today?" tod":"");
+      const cls="cell"+(out?" out":"")+(ds===today?" tod":"")+(dayTag(ds)?" "+dayTag(ds):"");
       const val = cd.kind==="sick" ? `<span class="h sk">sick</span>`
+                : cd.kind==="unp" ? `<span class="h sk">unpaid</span>`
                 : cd.mins ? `<span class="h${cd.kind==="hol"?" hol":""}">${qh(cd.mins)}</span>`
                 : `<span class="h z">&middot;</span>`;
       h+=`<button class="${cls}" data-ds="${ds}"${ds>lim?" disabled":""} aria-label="${DAYNAME[i]} ${shortDate(ds)}">
@@ -3613,7 +3644,7 @@ function renderCal(){
     h+=`<button class="wt" data-wk="${k}"${ahead?" disabled":""} aria-label="Week of ${shortDate(k)}">
       <b>${c&&c.hasData?qh(c.paidMins):"\u2014"}</b><span>hours</span></button></div>`;
   }
-  h+=`</div>`;
+  h+=`</div><div class="callegend"><span><i style="background:#E3ECF7;border:1px solid #2F5E9E"></i>holiday</span><span><i style="background:#FBE7D3;border:1px solid #B25A12"></i>bank holiday</span><span><i style="background:#F6DEDA;border:1px solid var(--red)"></i>unpaid</span></div>`;
   box.innerHTML=h;
   box.querySelectorAll(".cell[data-ds]").forEach(b=>b.addEventListener("click",()=>{
     if(b.disabled) return;
@@ -3863,7 +3894,8 @@ function goRates(){
    past that there is nothing to log and nothing to see, and a bank holiday
    sitting years ahead used to price a week that had not happened yet.
    the payslip tab keeps its own, tighter limit — the last real payday. */
-function navLimit(){ return addDays(mondayOf(iso(new Date())),13); }
+/* how far ahead he can go: a year, so booked time off can go in early */
+function navLimit(){ return addDays(mondayOf(iso(new Date())),7*53-1); }
 function navAtEnd(){
   if(tab==="pay") return plCur()>=addDays(lastPaidWeek(),7);
   if(tab==="history"||tab==="more") return false;

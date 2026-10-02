@@ -826,6 +826,42 @@ statutory, they already move with the tax year, and the real figures come off
 the slip. Changing jobs mid-year is a P45 matter and the app does not try to
 model it.
 
+## What v33 changed
+
+**Rounding grace — one threshold, 7.5 min per day worked.** `plThresh()` and
+`plRound()` are gone, and with them the `owedRound` / `owedThresh` settings.
+`plGrace(key, days)` gives overtime `7.5/60` h for every day with clocked time
+(`calc().daysWorked`, counted on `mins>0`), so holiday, sick, unpaid and
+unworked bank holidays earn nothing. Shortfall under the grace is silent; over
+it is flagged AND carried, unless he writes it off. 7.5 min is the most
+nearest-quarter rounding can move one day. `out[key].graced` and the "under the
+X-hour mark" payslip note are removed.
+
+**Weekly threshold hidden in daily overtime mode.** `renderSetup()` skips
+`basicCap` when `SMODE_NOW()==="day"`; it reappears in weekly mode.
+
+**Unpaid absence.** Fourth day toggle (`r.unp`) beside night out / holiday /
+sick, Mon–Fri non-bank-holiday only, mutually exclusive with holiday and sick.
+Pays nothing, counted in `calc().unpDays`, still a missed attendance day. Not in
+the CSV export yet.
+
+**Calendar colours.** `dayTag(ds)` tints cells: blue booked holiday, orange bank
+holiday (straight from the gov.uk `BH` table), red unpaid. Green stays for
+today's date only. Legend under the grid.
+
+**Look ahead a year.** `navLimit()` is now this Monday + 53 weeks, so future days
+can be opened and booked. Future holidays/bank holidays still pay nothing until
+the day arrives (unchanged pending logic).
+
+**Personal dates never ship.** Booked time off lives in his `localStorage`
+(`hourbook.v1`) like everything else; the HTML carries no personal data.
+
+**Tests.** `t_equiv` and `t_rc` now compare against the shipped v32 (set
+`OLD=/home/claude/v32.html`), ignoring the removed `graced` and added
+`daysWorked` / `unpDays` fields — every money and carry figure identical.
+`t_ui` look-ahead assertion updated. New `t_v33.py` (36 checks). All green:
+equiv 12, pill 19, ui 85, receipts 35, v33 36.
+
 ## What v31 and v32 changed
 
 v31 shipped the pill with the clocked-in row collapsed; v32 replaced that
