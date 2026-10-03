@@ -421,6 +421,25 @@ nav button.on .g{opacity:1}
 }
 .dbox input:focus{outline:none;border-color:var(--amber);background:#FFF8EE;box-shadow:0 0 0 3px rgba(167,95,7,.12)}
 .dlabels{display:flex;gap:10px;font-size:12.5px;color:var(--dim);margin-top:2px}
+/* v35: the label lives inside the pill, faint, under the typed value — same as the hours pill */
+.pbox{position:relative;display:block;flex:1 1 0;min-width:0;
+  background:var(--panel);border:1px solid var(--rule);border-radius:12px;cursor:text}
+.pbox .plb,.bigtimes .spl .plb{position:absolute;bottom:7px;left:0;right:0;text-align:center;
+  font-size:11px;line-height:1;color:var(--dim);pointer-events:none;letter-spacing:.02em}
+.bigtimes .pbox input,.dbox .pbox input{display:block;width:100%;border:0;background:transparent;
+  box-shadow:none;border-radius:12px;padding:0 0 12px;color:inherit}
+.bigtimes .pbox{height:64px}
+.bigtimes .pbox input{height:62px}
+.dbox .pbox{height:52px;border-radius:11px}
+.dbox .pbox input{height:50px}
+.bigtimes .pbox input:focus,.dbox .pbox input:focus{outline:none;border:0;background:transparent;box-shadow:none}
+.pbox:focus-within{border-color:var(--amber);background:#FFF8EE;box-shadow:0 0 0 3px rgba(167,95,7,.12)}
+.pbox.bad,.pbox.bad:focus-within{background:var(--red);border-color:var(--red)}
+.pbox.bad input{color:#FFF}
+.pbox.bad .plb{color:rgba(255,255,255,.8)}
+.pbox.bad input::placeholder{color:rgba(255,255,255,.6)}
+.bigtimes .spl{position:relative;height:64px !important;padding:0 0 12px !important}
+.bigtimes .spl.on .plb{color:rgba(255,255,255,.85)}
 .dlabels span{flex:1;text-align:center}
 .durs .wt{display:flex;align-items:baseline;gap:10px;margin-top:12px;padding-top:10px;border-top:1px solid var(--rule)}
 .durs .wt .nm{flex:1;font-size:14.5px}
@@ -895,7 +914,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v34";
+const BUILD="v35";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -1229,9 +1248,30 @@ function reducedSinceWeekly(ds){
     if(m===null) continue;
     const k=restKind(m);
     if(k==="weekly") break;
-    if(k==="reduced"||k==="short") n++;
+    if((k==="reduced"||k==="short") && !m.split) n++;
   }
   return n;
+}
+
+/* v35: which of the day's two times make a rest illegal */
+function restFlags(ds){
+  const d=load(), r=d.days[ds]||{};
+  const out={start:false,end:false};
+  const ri=restInfo(ds), k=restKind(ri);
+  /* reductions used before the rest that led into this shift */
+  const before=reducedSinceWeekly(addDays(ds,-1));
+  if(ri && parseHHMM(r.start)!==null){
+    if(k==="short") out.start=true;
+    else if(k==="reduced" && !ri.split && before>=3) out.start=true;
+  }
+  const st=startMs(ds,r), en=endMs(ds,r);
+  if(st!==null && en!==null){
+    let used = (k==="weekly") ? 0 : before + ((k==="reduced"||k==="short") && ri && !ri.split ? 1 : 0);
+    const need = (r.split || used<3) ? 9*60 : 11*60;
+    const room = Math.round((st+24*3600000-en)/60000);
+    if(room<need) out.end=true;
+  }
+  return out;
 }
 
 /* the longest break touching this week, worked out from the clock */
@@ -2140,6 +2180,15 @@ function renderDay(c){
   const redUsed=reducedSinceWeekly(curDay);
   const nineLeft=redUsed<3;
 
+  /* v35: flag times that make a rest illegal. the times are still saved —
+     red only tells him to check them against the tacho.
+     clocking IN: the rest before this shift is under 9h, or under 11h when
+     all three reductions were already gone before it.
+     clocking OUT: measured from this shift's own start, the 24-hour window
+     has no room left for a legal rest (9h with a reduction in hand, 11h
+     without; a split only ever needs its 9h). */
+  const flags=restFlags(curDay);
+
   const eMs=endMs(curDay,r), sMsToday=startMs(curDay,r);
   const sMs=startMs(curDay,r);
 
@@ -2227,18 +2276,16 @@ function renderDay(c){
     </div>
 
     <div class="bigtimes">
-      <input class="st" inputmode="numeric" maxlength="4" placeholder="0000" value="${r.start||""}" aria-label="Start">
-      <button class="spl${r.split?" on":""}" aria-label="Split rest" aria-pressed="${r.split?"true":"false"}">&#10003;</button>
-      <input class="fi" inputmode="numeric" maxlength="4" placeholder="0000" value="${r.end||""}" aria-label="Finish">
+      <label class="pbox${flags.start?" bad":""}"><span class="plb">start</span><input class="st" inputmode="numeric" maxlength="4" placeholder="0000" value="${r.start||""}" aria-label="Start"></label>
+      <button class="spl${r.split?" on":""}" aria-label="Split rest" aria-pressed="${r.split?"true":"false"}"><span class="plb">split</span>&#10003;</button>
+      <label class="pbox${flags.end?" bad":""}"><span class="plb">finish</span><input class="fi" inputmode="numeric" maxlength="4" placeholder="0000" value="${r.end||""}" aria-label="Finish"></label>
     </div>
-    <div class="tlabels"><span>start</span><i class="${r.split?"on":""}">split rest</i><span>finish</span></div>
 
 
     <div class="durs">
-      <div class="dlabels"><span>driving</span><span>other work</span></div>
       <div class="dbox">
-        <input class="dv" inputmode="numeric" maxlength="4" placeholder="0000" value="${durText(durMins(r.drive))}" aria-label="Driving">
-        <input class="ow" inputmode="numeric" maxlength="4" placeholder="0000" value="${durText(durMins(r.other))}" aria-label="Other work">
+        <label class="pbox"><span class="plb">driving</span><input class="dv" inputmode="numeric" maxlength="4" placeholder="0000" value="${durText(durMins(r.drive))}" aria-label="Driving"></label>
+        <label class="pbox"><span class="plb">other work</span><input class="ow" inputmode="numeric" maxlength="4" placeholder="0000" value="${durText(durMins(r.other))}" aria-label="Other work"></label>
       </div>
       <div class="wt"><span class="nm">Working time</span>
         <span class="vv ${wi.logged?"":"guess"}">${wi.logged?hm(wi.mins):"not logged"}</span></div>

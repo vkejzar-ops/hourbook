@@ -826,6 +826,30 @@ statutory, they already move with the tax year, and the real figures come off
 the slip. Changing jobs mid-year is a P45 matter and the app does not try to
 model it.
 
+## What v35 changed
+
+**Illegal-rest flag — the time pill goes red.** New `restFlags(ds)` returns
+`{start,end}`; the day screen adds `.bad` to the matching `.pbox`. Times are
+still saved — red is only a flag.
+- *Start* is red when the rest before this shift is `short` (under 9h in the
+  window), or `reduced` while all three reductions were already used before it
+  (counted with `reducedSinceWeekly(day-1)`). A split rest under 9h is red; a
+  split of 9h+ never is. A weekly rest before it clears everything.
+- *Finish* is red when, from this shift's own start, `start+24h-end` is below
+  what's needed: 9h with a reduction in hand (or on a split day), 11h without.
+- No rounding of its own: it judges exactly the times typed, so a five-minute
+  round across 9h or 11h flips it, as it should.
+
+**Labels inside the pills, under the number.** Start, finish, split, driving
+and other work are now `<label class="pbox">` with a faint `.plb` label under
+the value, same as the hours pill. The old `.tlabels`/`.dlabels` rows are gone
+from the markup. (`.plb` not `.pl` — `.pl` is already the pay-line row class.)
+Unpaid time keeps its fold heading.
+
+**Tests.** New `t_v35.py` (24 checks): both triggers at the 9h/11h lines,
+none-left, split, weekly reset, 5-minute rounding both ways, red values still
+saved, his real week, label placement. All suites green (228 checks).
+
 ## What v34 changed
 
 **Reduced-rest counter — a rest under 11h always counts.** `reducedSinceWeekly()`
