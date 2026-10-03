@@ -826,6 +826,30 @@ statutory, they already move with the tax year, and the real figures come off
 the slip. Changing jobs mid-year is a P45 matter and the app does not try to
 model it.
 
+## What v34 changed
+
+**Reduced-rest counter — a rest under 11h always counts.** `reducedSinceWeekly()`
+now tallies a `"short"` rest (under 9h in-window) as a used reduction too, in
+both the open-rest branch and the closed-rest loop. Rationale: anything under
+11h that isn't a weekly/regular/split rest has eaten the allowance, so it's one
+of the three whether it's 10h55 or 8h55. The day view still shows the
+`short`/`shortCut` warning ("under 9 hours, check your tacho"); only the tally
+changed. Real case that exposed it: a Wed->Thu gap of 8h55 was read as `short`
+and dropped, so three reduced rests showed as two ("1 left" when it should be
+none).
+
+**Day toggles — one row, label-only.** The 2x2 `.pair` grid of night out /
+holiday / sick / unpaid is replaced by a single `.toggles` flex row of four
+`.tog` buttons. No header labels, no grey hint lines, no "pays £25.00" / holiday
+-hours text. Each button shows only its name; lit orange = on, dashed grey =
+off or locked. Classes `.nt/.hol/.sk/.up` kept, so the click handlers are
+unchanged. On weekends/bank holidays only night out shows (holiday/sick/unpaid
+are weekday-only).
+
+**Tests.** New `t_v34.py` (3 checks) locks the reduced-rest fix against his real
+week and a clean reduced-only week. `t_v33.py` UI selectors updated to `.tog`.
+All green: equiv 12, pill 19, ui 85, receipts 35, v33 36, v34 3.
+
 ## What v33 changed
 
 **Rounding grace — one threshold, 7.5 min per day worked.** `plThresh()` and

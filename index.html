@@ -327,6 +327,13 @@ nav button.on .g{opacity:1}
 .callegend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
 .pair.four{flex-wrap:wrap;row-gap:12px;gap:10px}
 .pair.four .pf{flex:1 1 calc(50% - 10px)}
+/* v34: the four day markers as one tidy row, label-only buttons */
+.toggles{display:flex;gap:7px;padding:12px 0;border-bottom:1px solid var(--rule)}
+.tog{flex:1 1 0;min-width:0;height:var(--tap);border:1px solid var(--rule);border-radius:9px;
+  background:var(--panel);color:var(--dim);font-size:13.5px;text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tog.on{background:var(--amber);border-color:var(--amber);color:#FFF;font-weight:600}
+.tog:disabled{opacity:1;color:var(--rule);background:var(--ground);border-style:dashed}
 .cgrid .cell:disabled{cursor:default}
 .cgrid .cell:not(:disabled):active{background:var(--panel-2)}
 .cgrid .wt{display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -888,7 +895,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v33";
+const BUILD="v34";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -1213,7 +1220,7 @@ function reducedSinceWeekly(ds){
     const day=addDays(ds,-i);
     if(endMs(day,d.days[day]||{})===null) continue;
     const o=openRestInfo(day);
-    if(o && o.kind==="reduced" && !(d.days[day]||{}).split) n++;
+    if(o && (o.kind==="reduced"||o.kind==="short") && !(d.days[day]||{}).split) n++;
     break;                                 // only the most recent shift
   }
   for(let i=0;i<30;i++){
@@ -1222,7 +1229,7 @@ function reducedSinceWeekly(ds){
     if(m===null) continue;
     const k=restKind(m);
     if(k==="weekly") break;
-    if(k==="reduced") n++;
+    if(k==="reduced"||k==="short") n++;
   }
   return n;
 }
@@ -2240,27 +2247,11 @@ function renderDay(c){
         : "Off the tacho, in hours and minutes \u2014 0837 is 8h 37. Both are needed before the week counts the day."}</p>
     </div>
 
-    <div class="pair${canHol?" four":""}">
-      <div class="pf${r.sick?" off":""}">
-        <span class="lb">Night out</span>
-        <button class="chip nt${r.night?" on":""}"${r.sick?" disabled":""}>${r.sick?"—":r.night?"yes":"no"}</button>
-        <span class="hint">${r.sick?"not while you are off sick":"pays £"+n2(nightRate(curDay))+(S("meal",curDay)>0?" with the meal":"")}</span>
-      </div>
-      ${canHol?`<div class="pf${worked||r.sick||r.unp?" off":""}">
-        <span class="lb">Holiday</span>
-        <button class="chip hol${r.hol?" on":""}"${worked||r.sick||r.unp?" disabled":""}>${worked||r.sick||r.unp?"—":r.hol?"booked":"no"}</button>
-        <span class="hint">${worked?"clear the times to book it off":r.sick?"clear the sick tick to book it":r.unp?"marked as unpaid":"pays "+S("holHours",curDay)+" hours"+(SMODE(curDay)==="day"?" at basic":" towards the "+S("basicCap",curDay))}</span>
-      </div>
-      <div class="pf${worked||r.hol||r.unp?" off":""}">
-        <span class="lb">Sick</span>
-        <button class="chip sk${r.sick?" on":""}"${worked||r.hol||r.unp?" disabled":""}>${worked||r.hol||r.unp?"—":r.sick?"sick":"no"}</button>
-        <span class="hint">${worked?"clear the times to mark it":r.hol?"booked as holiday":r.unp?"marked as unpaid":sickHint}</span>
-      </div>
-      <div class="pf${worked||r.hol||r.sick?" off":""}">
-        <span class="lb">Unpaid</span>
-        <button class="chip up${r.unp?" on":""}"${worked||r.hol||r.sick?" disabled":""}>${worked||r.hol||r.sick?"—":r.unp?"unpaid":"no"}</button>
-        <span class="hint">${worked?"clear the times to mark it":r.hol?"booked as holiday":r.sick?"marked as sick":"absence, pays nothing"}</span>
-      </div>`:""}
+    <div class="toggles">
+      <button class="tog nt${r.night?" on":""}"${r.sick?" disabled":""} aria-pressed="${r.night?"true":"false"}">night out</button>
+      ${canHol?`<button class="tog hol${r.hol?" on":""}"${worked||r.sick||r.unp?" disabled":""} aria-pressed="${r.hol?"true":"false"}">holiday</button>
+      <button class="tog sk${r.sick?" on":""}"${worked||r.hol||r.unp?" disabled":""} aria-pressed="${r.sick?"true":"false"}">sick</button>
+      <button class="tog up${r.unp?" on":""}"${worked||r.hol||r.sick?" disabled":""} aria-pressed="${r.unp?"true":"false"}">unpaid</button>`:""}
     </div>
 
     <div class="expb">
