@@ -826,6 +826,30 @@ statutory, they already move with the tax year, and the real figures come off
 the slip. Changing jobs mid-year is a P45 matter and the app does not try to
 model it.
 
+## What v36 changed
+
+**Notes per day.** A free-text box at the very bottom of the day screen, saved
+to that day as `days[ds].note` (deleted when emptied). Saves on every
+keystroke without re-rendering, so the keyboard stays up. Days with a note get
+a small amber dot in the top corner of their calendar cell.
+
+**Route map (optional).** Settings → Extras → Route map: on/off, Home
+Assistant https address, long-lived token, and the phone's tracker entity.
+Nothing is in the code — empty boxes mean the feature never shows. When set
+up, a worked day with both clock-in and clock-out shows a Route section above
+"See the whole week": the app calls `/api/history/period/<clock-in>?end_time=
+<clock-out>&filter_entity_id=<entity>&significant_changes_only=0` and draws the
+latitude/longitude trail on OpenStreetMap tiles (no map library — tiles placed
+by hand, SVG line on top, green start, red finish, +/- zoom). Results are
+cached per day so typing doesn't re-ask. The token is stripped from backup
+files. Home Assistant needs `http: cors_allowed_origins:` with the app's
+address; the door shows the exact snippet. An http:// address is refused with
+an explanation, since an https page can't call it. `sw.js` now lets other
+sites' requests (tiles, Home Assistant) go straight to the network.
+
+**Tests.** `t_v36.py` (5) and `t_map.py` (23, Home Assistant and tiles
+mocked). `t_ui` now expects the Extras group. All suites green (256 checks).
+
 ## What v35 changed
 
 **Illegal-rest flag — the time pill goes red.** New `restFlags(ds)` returns

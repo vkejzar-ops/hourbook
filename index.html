@@ -317,6 +317,27 @@ nav button.on .g{opacity:1}
 .cgrid .cell .h.hol{color:var(--amber)}
 .cgrid .cell .h.sk{font-size:11px;font-weight:500;color:var(--dim)}
 .cgrid .cell .h.z{color:#C9C1B2;font-weight:400}
+.cgrid .cell{position:relative}
+.cgrid .cell .ndot{position:absolute;top:4px;right:4px;width:5px;height:5px;border-radius:50%;background:var(--amber)}
+/* v36: per-day notes box */
+.notes{padding:14px 0 2px;border-top:1px solid var(--rule);margin-top:14px}
+.notes .lb{display:block;font-size:14.5px;margin-bottom:7px}
+.nt-area{width:100%;box-sizing:border-box;min-height:52px;resize:vertical;font:inherit;font-size:15px;line-height:1.4;color:inherit;background:var(--panel);border:1px solid var(--rule);border-radius:11px;padding:10px 12px}
+.nt-area:focus{outline:none;border-color:var(--amber);background:#FFF8EE;box-shadow:0 0 0 3px rgba(167,95,7,.12)}
+/* v36: route map */
+.route{padding:14px 0 2px}
+.route .lb{display:block;font-size:14.5px;margin-bottom:7px}
+.rstat{font-size:13.5px;color:var(--dim);margin:0 0 6px}
+.rstat:empty{display:none}
+.rmap{position:relative;height:260px;overflow:hidden;border-radius:12px;border:1px solid var(--rule);background:#E8E4DA}
+.rtile{position:absolute;width:256px;height:256px;max-width:none;user-select:none;pointer-events:none}
+.rsvg{position:absolute;left:0;top:0}
+.rzoom{position:absolute;right:8px;top:8px;display:flex;flex-direction:column;gap:6px}
+.rzoom button{width:34px;height:34px;border-radius:9px;border:1px solid var(--rule);background:rgba(255,255,255,.95);font-size:19px;line-height:1;color:#222}
+.rattr{position:absolute;right:4px;bottom:3px;font-size:10px;background:rgba(255,255,255,.75);padding:1px 4px;border-radius:4px;color:#444}
+.mtog{display:flex;align-items:center;justify-content:space-between}
+.mtog input{width:22px;height:22px}
+pre.cfg{background:var(--panel);border:1px solid var(--rule);border-radius:10px;padding:10px 12px;font-size:13px;overflow-x:auto;white-space:pre}
 .cgrid .cell.out .n,.cgrid .cell.out .h{opacity:.4}
 .cgrid .cell.tod .n{background:var(--green);color:#FFF;border-radius:9px;padding:0 5px}
 /* v33: day colours — blue holiday, orange bank holiday, red unpaid */
@@ -783,6 +804,17 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
       </div>
     </div>
 
+    <div class="door hidden" data-door="map" data-title="Route map">
+      <div class="fold">
+        <div id="setMap"></div>
+        <p class="note">Optional. If you run Home Assistant with its phone app, Hourbook can show where your phone went between clock-in and clock-out on each day. Leave it off and nothing changes. These details stay on this phone only and are left out of backup files.</p>
+        <p class="note">Home Assistant has to allow the app to ask it. Add this to its configuration.yaml, with the address this app opens on, then restart Home Assistant:</p>
+        <pre class="cfg">http:
+  cors_allowed_origins:
+    - <span id="haOrigin"></span></pre>
+      </div>
+    </div>
+
     <div class="door hidden" data-door="erase" data-title="Erase all data">
       <div class="fold">
     <p class="note">This takes every day, every payslip, your rates and every receipt photo off this phone. Download a backup first if there is anything you want to keep.</p>
@@ -914,7 +946,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v35";
+const BUILD="v36";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -2325,7 +2357,14 @@ function renderDay(c){
       </div>
     </details>
 
+    ${haReady()&&r.start&&r.end?`<div class="route" id="routeBox"><span class="lb">Route</span><p class="rstat"></p><div class="rmap hidden"></div></div>`:""}
+
     <button class="linkrow" id="toWeek">See the whole week ›</button>
+
+    <div class="notes">
+      <label class="lb" for="dayNote">Notes</label>
+      <textarea id="dayNote" class="nt-area" rows="2" placeholder="Anything worth remembering about this day — a camera flash, a problem on the road, who you spoke to…">${esc(r.note||"")}</textarea>
+    </div>
   `;
 
   /* a row he has just added is empty by definition, so it survives; a row
@@ -2396,6 +2435,16 @@ function renderDay(c){
   if(skBtn) skBtn.addEventListener("click",()=>set("sick",r.sick?"":true));
   const upBtn=box.querySelector(".up");
   if(upBtn) upBtn.addEventListener("click",()=>set("unp",r.unp?"":true));
+
+  const noteEl=box.querySelector("#dayNote");
+  if(noteEl) noteEl.addEventListener("input",e=>{
+    const rec=d.days[curDay]||(d.days[curDay]={});
+    const v=e.target.value;
+    if(v.trim()==="") delete rec.note; else rec.note=v;
+    save();                         /* quiet save: keep the keyboard up */
+  });
+
+  if(haReady()&&r.start&&r.end) showRoute(box,curDay,r);
 
   [["dv","drive"],["ow","other"],["dd","ded"]].forEach(([cls,key])=>{
     const el=box.querySelector("."+cls);
@@ -3177,7 +3226,9 @@ function disputeCsv(){
 /* ============ backup ============ */
 function backupName(){ return "hourbook-backup-"+iso(new Date())+".json"; }
 function doBackup(){
-  download(backupName(),JSON.stringify(load()),"application/json");
+  /* the Home Assistant token is a key to someone's house: never in a file */
+  const out=JSON.parse(JSON.stringify(load())); if(out.settings) delete out.settings.haToken;
+  download(backupName(),JSON.stringify(out),"application/json");
   const d=load(); d.settings.lastBackup=iso(new Date()); save();
 }
 function backupEvery(){
@@ -3608,6 +3659,8 @@ function renderSetup(){
   build(SETUP_RATES,document.getElementById("setRates"));
   buildRateHist(document.getElementById("rateHist"));
   build(SETUP_DED,document.getElementById("setDed"));
+  buildMapSetup();
+  const og=document.getElementById("haOrigin"); if(og) og.textContent=location.origin;
   document.getElementById("verNote").textContent =
     "Build "+BUILD+". "+
     (memOnly?"Storage is blocked here, so nothing will survive a reload — it will work once it is on your phone. ":"")+
@@ -3675,8 +3728,9 @@ function renderCal(){
                 : cd.kind==="unp" ? `<span class="h sk">unpaid</span>`
                 : cd.mins ? `<span class="h${cd.kind==="hol"?" hol":""}">${qh(cd.mins)}</span>`
                 : `<span class="h z">&middot;</span>`;
-      h+=`<button class="${cls}" data-ds="${ds}"${ds>lim?" disabled":""} aria-label="${DAYNAME[i]} ${shortDate(ds)}">
-        <span class="n">${fromIso(ds).getDate()}</span>${val}</button>`;
+      const hasNote=!!(load().days[ds]||{}).note;
+      h+=`<button class="${cls}" data-ds="${ds}"${ds>lim?" disabled":""} aria-label="${DAYNAME[i]} ${shortDate(ds)}${hasNote?", has a note":""}">
+        <span class="n">${fromIso(ds).getDate()}</span>${val}${hasNote?`<span class="ndot" aria-hidden="true"></span>`:""}</button>`;
     }
     const ahead=k>lim, c=ahead?null:calc(k);
     h+=`<button class="wt" data-wk="${k}"${ahead?" disabled":""} aria-label="Week of ${shortDate(k)}">
@@ -3696,6 +3750,135 @@ function renderCal(){
   }));
 }
 
+/* ============ route map (v36) ============
+   optional, off unless someone fills it in. Hourbook asks the person's own
+   Home Assistant where their phone was between clock-in and clock-out and
+   draws that on OpenStreetMap tiles. nothing about it is in the code: the
+   address, token and entity live in this phone's settings only, and the
+   token is left out of backup files. no map library — tiles are placed by
+   hand, the route is an SVG line over them. */
+const MAP_H=260, TILE=256;
+let mapCache={}, mapZoomAdj={};
+function haCfg(){
+  const s=load().settings;
+  return { on:!!s.haOn, url:String(s.haUrl||"").trim().replace(/\/+$/,""),
+           token:String(s.haToken||"").trim(), entity:String(s.haEntity||"").trim() };
+}
+function haReady(c){ c=c||haCfg(); return c.on && c.url && c.token && c.entity; }
+function haUrlProblem(u){
+  if(!/^https?:\/\//i.test(u)) return "The address needs to start with https://";
+  if(location.protocol==="https:" && /^http:\/\//i.test(u))
+    return "The app is on https, so the phone won't let it talk to an http:// address. Use your Home Assistant's https address.";
+  return "";
+}
+async function haHistory(c,fromMs,toMs){
+  const u=c.url+"/api/history/period/"+new Date(fromMs).toISOString()+
+    "?end_time="+encodeURIComponent(new Date(toMs).toISOString())+
+    "&filter_entity_id="+encodeURIComponent(c.entity)+"&significant_changes_only=0";
+  let res;
+  try{ res=await fetch(u,{headers:{Authorization:"Bearer "+c.token},cache:"no-store"}); }
+  catch(e){ throw new Error("reach"); }
+  if(res.status===401||res.status===403) throw new Error("token");
+  if(!res.ok) throw new Error("http "+res.status);
+  const j=await res.json();
+  const rows=Array.isArray(j)&&Array.isArray(j[0])?j[0]:[];
+  const pts=[];
+  rows.forEach(x=>{ const a=x&&x.attributes||{}, la=Number(a.latitude), lo=Number(a.longitude);
+    if(isFinite(la)&&isFinite(lo)&&a.latitude!==undefined&&a.longitude!==undefined){
+      const p=pts[pts.length-1]; if(!p||p[0]!==la||p[1]!==lo) pts.push([la,lo]); } });
+  return pts;
+}
+function haErrText(e){
+  const m=String(e&&e.message||e);
+  if(m==="token") return "Home Assistant turned the token down. Check it in Settings → Route map.";
+  if(m==="reach") return "Couldn't reach Home Assistant. Check Tailscale is on, the address is right, and the cors setting is in place (Settings → Route map).";
+  return "Home Assistant answered with an error ("+m+").";
+}
+/* web mercator, in pixels at zoom z */
+function mPx(la,lo,z){ const n=TILE*Math.pow(2,z), s=Math.sin(la*Math.PI/180);
+  return [ (lo+180)/360*n, (0.5-Math.log((1+s)/(1-s))/(4*Math.PI))*n ]; }
+function fitZoom(pts,w,h){
+  for(let z=17;z>=1;z--){
+    const xy=pts.map(p=>mPx(p[0],p[1],z));
+    const xs=xy.map(p=>p[0]), ys=xy.map(p=>p[1]);
+    if(Math.max(...xs)-Math.min(...xs)<=w-40 && Math.max(...ys)-Math.min(...ys)<=h-40) return z;
+  }
+  return 1;
+}
+function drawRoute(el,pts,key){
+  const w=el.clientWidth||340, h=MAP_H;
+  let z=fitZoom(pts,w,h)+(mapZoomAdj[key]||0); z=Math.max(1,Math.min(18,z));
+  const xy=pts.map(p=>mPx(p[0],p[1],z));
+  const xs=xy.map(p=>p[0]), ys=xy.map(p=>p[1]);
+  const cx=(Math.min(...xs)+Math.max(...xs))/2, cy=(Math.min(...ys)+Math.max(...ys))/2;
+  const ox=cx-w/2, oy=cy-h/2, n=Math.pow(2,z);
+  let tiles="";
+  for(let tx=Math.floor(ox/TILE); tx<=Math.floor((ox+w)/TILE); tx++)
+    for(let ty=Math.floor(oy/TILE); ty<=Math.floor((oy+h)/TILE); ty++){
+      if(ty<0||ty>=n) continue;
+      const wx=((tx%n)+n)%n;
+      tiles+=`<img class="rtile" alt="" src="https://tile.openstreetmap.org/${z}/${wx}/${ty}.png" style="left:${tx*TILE-ox}px;top:${ty*TILE-oy}px">`;
+    }
+  const line=xy.map(p=>(p[0]-ox).toFixed(1)+","+(p[1]-oy).toFixed(1)).join(" ");
+  const a=xy[0], b=xy[xy.length-1];
+  el.innerHTML=tiles+`<svg class="rsvg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+      <polyline points="${line}" fill="none" stroke="#fff" stroke-width="7" stroke-linejoin="round" stroke-linecap="round" opacity=".85"/>
+      <polyline points="${line}" fill="none" stroke="#A75F07" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${a[0]-ox}" cy="${a[1]-oy}" r="7" fill="#2E7D4F" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="${b[0]-ox}" cy="${b[1]-oy}" r="7" fill="#B3352A" stroke="#fff" stroke-width="2.5"/>
+    </svg>
+    <div class="rzoom"><button data-z="1" aria-label="Zoom in">+</button><button data-z="-1" aria-label="Zoom out">&minus;</button></div>
+    <span class="rattr">&copy; OpenStreetMap</span>`;
+  el.querySelectorAll(".rzoom button").forEach(bt=>bt.addEventListener("click",()=>{
+    mapZoomAdj[key]=(mapZoomAdj[key]||0)+Number(bt.dataset.z); drawRoute(el,pts,key); }));
+}
+function showRoute(box,ds,r){
+  const wrap=box.querySelector("#routeBox"); if(!wrap) return;
+  const el=wrap.querySelector(".rmap"), st=wrap.querySelector(".rstat");
+  const c=haCfg(), a=startMs(ds,r), b=endMs(ds,r);
+  const bad=haUrlProblem(c.url);
+  if(bad){ st.textContent=bad; el.classList.add("hidden"); return; }
+  const key=[c.url,c.entity,a,b].join("|");
+  const done=pts=>{
+    if(!pts.length){ st.textContent="No phone location recorded between clock-in and clock-out."; el.classList.add("hidden"); return; }
+    st.textContent=pts.length===1?"Only one position recorded in that time.":"";
+    el.classList.remove("hidden"); drawRoute(el,pts,key);
+  };
+  if(mapCache[key]){ done(mapCache[key]); return; }
+  st.textContent="Asking Home Assistant…"; el.classList.add("hidden");
+  haHistory(c,a,b).then(pts=>{ mapCache[key]=pts;
+    if(box.querySelector("#routeBox")===wrap) done(pts); })
+  .catch(e=>{ if(box.querySelector("#routeBox")===wrap){ st.textContent=haErrText(e); } });
+}
+function buildMapSetup(){
+  const el=document.getElementById("setMap"); if(!el) return;
+  const s=load().settings;
+  el.innerHTML=`
+    <label class="field mtog"><span>Show my route on each day</span>
+      <input type="checkbox" id="haOn"${s.haOn?" checked":""}></label>
+    <div class="field"><label>Home Assistant address<span class="hint">the https address you open it on</span></label>
+      <input id="haUrl" type="url" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="https://homeassistant.example.ts.net" value="${esc(s.haUrl||"")}"></div>
+    <div class="field"><label>Access token<span class="hint">a long-lived token from your Home Assistant profile</span></label>
+      <input id="haToken" type="password" autocomplete="off" value="${esc(s.haToken||"")}"></div>
+    <div class="field"><label>Phone's tracker<span class="hint">the entity, e.g. device_tracker.my_phone</span></label>
+      <input id="haEntity" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="device_tracker.my_phone" value="${esc(s.haEntity||"")}"></div>
+    <button class="btn" id="haTest">Test it</button>
+    <p class="note" id="haTestNote"></p>`;
+  const put=(k,v)=>{ const d=load(); if(v===""||v===false) delete d.settings[k]; else d.settings[k]=v; save(); mapCache={}; };
+  el.querySelector("#haOn").addEventListener("change",e=>{ put("haOn",e.target.checked?1:false); render(); });
+  [["haUrl","haUrl"],["haToken","haToken"],["haEntity","haEntity"]].forEach(([id,k])=>
+    el.querySelector("#"+id).addEventListener("change",e=>{ put(k,e.target.value.trim()); }));
+  el.querySelector("#haTest").addEventListener("click",async()=>{
+    const n=el.querySelector("#haTestNote"), c=haCfg();
+    if(!c.url||!c.token||!c.entity){ n.textContent="Fill in all three boxes first."; return; }
+    const bad=haUrlProblem(c.url); if(bad){ n.textContent=bad; return; }
+    n.textContent="Checking…";
+    try{ const t=Date.now(), pts=await haHistory(c,t-86400000,t);
+      n.textContent="Connected. "+pts.length+" position"+(pts.length===1?"":"s")+" for that tracker in the last 24 hours."; }
+    catch(e){ n.textContent=haErrText(e); }
+  });
+}
+
 /* ============ settings list (v30) ============
    a short list of doors. each one opens the same fields the old folds held,
    one screen at a time; nothing about what they store has changed. */
@@ -3703,6 +3886,7 @@ const SET_GROUPS=[
   ["Your job",[["rates","Pay rates",()=>"\u00a3"+n2(SNOW("basicRate"))+" basic"]]],
   ["Tax & deductions",[["ded","Tax code, pension, NI",()=>SS("taxCode")]]],
   ["Calendar",[["bh","Bank holidays",()=>{ const ys=BH.years(); return ys.length?"to end of "+ys[ys.length-1]:"none loaded"; }]]],
+  ["Extras",[["map","Route map",()=>haReady()?"on":"off"]]],
   ["Your data",[
     ["backup","Backup",()=>{ const l=load().settings.lastBackup; return l?"last "+prettyDate(l):"not yet"; }],
     ["export","Export",()=>"CSV"],

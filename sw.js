@@ -1,7 +1,7 @@
 /* Hourbook offline cache.
    Bump CACHE when you upload a new index.html — that is what makes
    phones pick the new version up instead of the old cached one. */
-const CACHE = "hourbook-v35";
+const CACHE = "hourbook-v36";
 const FILES = ["./", "./index.html", "./icon-180.png", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
@@ -25,6 +25,8 @@ self.addEventListener("activate", e => {
    signal. In the background, fetch a fresh copy for next time. */
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
+  /* other sites (map tiles, Home Assistant) go straight to the network */
+  if (new URL(e.request.url).origin !== self.location.origin) return;
   e.respondWith(
     caches.match(e.request, { ignoreSearch: true }).then(hit => {
       const live = fetch(e.request).then(res => {
