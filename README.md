@@ -54,6 +54,28 @@ the second serves the new file.
 
 ---
 
+## Weekly or monthly pay, and first-run setup (v37)
+
+- **No preset rates.** A new install starts with every employer rate at nothing.
+  Anyone already using the app had blanks that quietly meant the old built-in
+  figures; on first open of v37 those blanks are written in as exactly those
+  figures (`LEGACY_RATES`, current rates and every closed rate era), so their
+  pay does not move. Old backups get the same treatment on restore.
+- **Setup screen** (`setupOpen("new"|"change")`). New install: rates, weekly or
+  monthly, and P45 / latest-payslip figures into pay-so-far. Settings → Pay
+  rates → "New job, or pay changed" opens the same screen with the current
+  rates and the year so far filled in from what is logged.
+- **Monthly pay.** A period is every week whose Sunday falls after the last
+  cut-off and on or before this one (weeks are never split). Paid on the chosen
+  day on or after the cut-off; a weekend or bank holiday moves it to the working
+  day before. Tax is cumulative by tax month (6 Apr–5 May is month 1); NI,
+  pension, student loan and the medical benefit use monthly thresholds. Period
+  keys are `m`+cut-off date; monthly slips live in `months`, weekly in `weeks`.
+- **Switching weekly ↔ monthly** closes a frequency era (`freqHist`, ends on a
+  Sunday) and hands the tax year so far over (`modeHand`), the way a P45 would.
+  Weeks before the switch are untouched.
+- **Rest owed back** shows as a card on Today and at the top of Rest.
+
 ## The pay rules
 
 These came from his own reference doc and were then verified against five real

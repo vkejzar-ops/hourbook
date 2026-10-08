@@ -292,6 +292,14 @@ nav button.on .g{opacity:1}
    and the week. tapping it opens the full drivers' hours screen. */
 .hpill{display:block;width:100%;margin:14px 0 2px;background:var(--panel);
   border:1px solid var(--rule);border-radius:26px;padding:10px 12px;text-align:center}
+.rbill{display:block;width:100%;margin:14px 0 2px;text-align:left;
+  background:#FBEFD9;border:2px solid var(--amber);border-radius:14px;padding:11px 14px;color:var(--ink,#221d16)}
+.rbill .t{display:block;font-size:17px;font-weight:600;line-height:1.25}
+.rbill .t b{color:var(--amber)}
+.rbill .s{display:block;font-size:13.5px;line-height:1.35;margin-top:4px}
+.rbill.late{background:#F7DEDA;border-color:var(--red)}
+.rbill.late .t b{color:var(--red)}
+.rbill + .rbill{margin-top:8px}
 .hpill .hr{display:flex;align-items:flex-start}
 .hpill .hr + .hr{margin-top:9px;padding-top:9px;border-top:1px solid var(--rule)}
 .hpill .hc{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center}
@@ -626,6 +634,21 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
 .ckl{font-size:12.5px;color:var(--dim)}
 .ck.on .ckl{color:var(--green)}
 @media (prefers-reduced-motion:no-preference){.btn,.chip{transition:background .12s}}
+/* ---- v37 setup screen ---- */
+#setup{position:fixed;inset:0;z-index:61;background:rgba(20,17,12,.55);
+  display:flex;align-items:flex-end;justify-content:center}
+#setup.hidden{display:none}
+#setup .box{background:var(--ground,#F6F2EA);width:100%;max-width:520px;
+  border-radius:16px 16px 0 0;padding:22px 16px calc(18px + env(safe-area-inset-bottom));
+  max-height:92vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#setup h3{font-size:20px;font-weight:600;margin:0 0 8px}
+#setup h4{font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dim);margin:20px 0 4px}
+#setup .lead{font-size:14px;line-height:1.5;color:var(--dim);margin:0 0 6px}
+#setup .hidden{display:none}
+#setup .unit{font-size:13px;color:var(--dim)}
+#setup .go{width:100%;margin-top:20px;padding:14px;border:0;border-radius:10px;background:var(--amber);color:#fff;font-size:16px;font-weight:600}
+#setup .later{width:100%;margin-top:8px;padding:12px;border:1px solid var(--rule);border-radius:10px;background:var(--panel);font-size:15px;color:var(--dim)}
+#setup input[type=date]{width:150px;text-align:left}
 /* ---- the first-run notice ---- */
 #intro{position:fixed;inset:0;z-index:60;background:rgba(20,17,12,.55);
   display:flex;align-items:flex-end;justify-content:center;padding:0}
@@ -689,6 +712,8 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
     check here first, because the app may simply not know something yet.</p>
   <button id="introOk">Got it</button>
 </div></div>
+
+<div id="setup" class="hidden"><div class="box"></div></div>
 
 <main>
 
@@ -775,10 +800,11 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
 
     <div class="door hidden" data-door="rates" data-title="Pay rates">
       <div class="fold">
+        <p class="note" id="setFreq" style="margin-top:0"></p>
         <div id="setOt"></div>
         <div id="setRates"></div>
-        <button class="btn" id="rateChanged">My pay has changed</button>
-        <p class="note">Use this the day your rates change — a new job, or a rise. The figures above are kept as they are for every week up to the date you give, so weeks you have already been paid for stay exactly as they were paid. From the Monday after, the boxes above are what counts, and you edit them to the new ones.</p>
+        <button class="btn primary" id="rateChanged">New job, or pay changed</button>
+        <p class="note">Walks you through the new rates and how you are paid, weekly or monthly. Everything up to the date you give keeps the old figures, so weeks you have already been paid for stay exactly as they were. Small corrections can be typed straight into the boxes above.</p>
         <div id="rateHist"></div>
       </div>
     </div>
@@ -923,30 +949,44 @@ async function checkBankHolidays(){
 
 
 /* ============ defaults ============ */
-const DEFAULTS = {
-  basicRate:14.00, basicCap:50,
-  otRate:18.38,
-  satRate:20.96, satMin:5,
-  sunRate:20.96, sunMin:5,
+/* what every install used to start with, before the app went public. NOT
+   the defaults any more — a new user starts with nothing and types their own.
+   kept for one job only: anyone who was already using the app had blanks
+   that silently meant these figures, so on first open of v37 those blanks
+   are filled in with exactly these, and nothing they see changes. */
+const LEGACY_RATES = {
+  basicRate:14.00, basicCap:50, otRate:18.38,
+  satRate:20.96, satMin:5, sunRate:20.96, sunMin:5,
   nightOut:25.00, meal:5.00, attendance:50.00,
+  otMode:"week", otDayHours:8, bhHours:10, holHours:10, sickRate:"",
+  bik:1.15, bikOn:1
+};
+const DEFAULTS = {
+  /* employer money starts at nothing — the first-run setup, or Settings, is
+     where each driver puts their own */
+  basicRate:0, basicCap:40,
+  otRate:0,
+  satRate:0, satMin:0,
+  sunRate:0, sunMin:0,
+  nightOut:0, meal:0, attendance:0,
   /* how overtime is worked out. "week" is the pool-over-basicCap rule; "day"
      pays anything past otDayHours on a single weekday at the overtime rate
-     and has no weekly threshold at all. "week" is the default and stays the
-     default — nobody gets the other one without asking for it. */
+     and has no weekly threshold at all. */
   otMode:"week", otDayHours:8,
-  bhHours:10,
-  holHours:10,
+  bhHours:8,
+  holHours:8,
   sickRate:"",
   backupWeeks:2,
   pensionRate:5, pensionLower:120.00, pensionUpper:967.00,
-  bik:1.15, bikOn:1,
+  bik:0, bikOn:0,
   taxCode:"1257L", slPlan:"",
   ytdFrom:"", ytdTaxable:"", ytdTax:"",
-  niRate:8, niFree:242.00, niUpper:967.00, niRate2:2
+  niRate:8, niFree:242.00, niUpper:967.00, niRate2:2,
+  payFreq:"weekly", payDate:"", payCut:""
 };
 
 /* ============ storage ============ */
-const BUILD="v36";
+const BUILD="v37";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -974,7 +1014,29 @@ function load(){
     });
     mem.settings.durMigrated=1;
   }
+  /* v37: the defaults went blank. anybody already using the app gets the old
+     figures written into every box they had left empty — current rates and
+     every closed era — so their pay does not move by a penny. a brand new
+     install has nothing to protect and goes to the setup screen instead. */
+  if(!mem.settings.ratesFrozen){
+    const s=mem.settings;
+    const used = Object.keys(mem.days).length || Object.keys(mem.weeks).length || s.introRev;
+    if(used) freezeLegacy(s);
+    s.ratesFrozen=1;
+    if(!memOnly) save();
+  }
   return mem;
+}
+const blankV = v => v===undefined||v===null||v==="";
+function freezeLegacy(s){
+  for(const k in LEGACY_RATES) if(blankV(s[k])) s[k]=LEGACY_RATES[k];
+  if(Array.isArray(s.rateHist)) s.rateHist.forEach(e=>{
+    if(!e) return; e.rates=e.rates||{};
+    RATE_KEYS.forEach(k=>{ if(blankV(e.rates[k])) e.rates[k]=LEGACY_RATES[k]; });
+  });
+  if(blankV(s.payFreq)) s.payFreq="weekly";
+  s.setupDone=1;
+  s.ratesFrozen=1;
 }
 function save(){
   try{ localStorage.setItem(KEY,JSON.stringify(mem)); }
@@ -1240,6 +1302,30 @@ function weeklyPayback(k){
   return {owed, by, paid:false};
 }
 
+
+/* v37: every reduced weekly rest still owed back as at day ds — not yet
+   paid, and either still inside its deadline or gone past it within the last
+   four weeks (overdue is shown too: hiding it would be worse). newest last. */
+function restOwed(ds){
+  const out=[], wk=mondayOf(ds);
+  for(let i=8;i>=1;i--){
+    const k=addDays(wk,-7*i);
+    if(addDays(k,6)>=ds) continue;            /* the week must be finished */
+    const pb=weeklyPayback(k);
+    if(!pb || pb.paid) continue;
+    if(pb.by<addDays(ds,-28)) continue;
+    out.push({k, owed:pb.owed, by:pb.by, late:pb.by<ds});
+  }
+  return out;
+}
+function restOwedBill(ds){
+  const o=restOwed(ds);
+  if(!o.length) return "";
+  return o.map(x=>`<button class="rbill${x.late?" late":""}" data-rbill="1">
+    <span class="t">${x.late?"Overdue: ":"You owe "}<b>${hm(x.owed)}</b> weekly rest</span>
+    <span class="s">${x.late?"was due by":"take it by"} <b>${DAYSHORT[dowIndex(x.by)]} ${shortDate(x.by)}</b> — in one block, added to a weekly rest (week of ${shortDate(x.k)})</span>
+  </button>`).join("");
+}
 
 /* how many reduced daily rests have been used since the last weekly rest,
    counting backwards from and including the given day */
@@ -1594,11 +1680,11 @@ function expMissing(items, shortPence){
    the ordinary case needs no tap at all. pinning the debt to the receipt
    rather than to a bare amount is what lets a later slip say which one finally
    came through, instead of just announcing he is twelve pounds fifty up. */
-function expRefOb(x){ return {key:x.key, i:x.i, pence:x.pence, label:x.label}; }
-function expRefText(r){ return SHORTDAY[r.i]+" "+(r.label||"no description")+" "+penceText(r.pence); }
+function expRefOb(x){ const o={key:x.key, i:x.i, pence:x.pence, label:x.label}; if(x.mo){ o.mo=1; o.ds=x.ds; } return o; }
+function expRefText(r){ return (r.mo&&r.ds ? SHORTDAY[dowIndex(r.ds)]+" "+shortDate(r.ds) : SHORTDAY[r.i])+" "+(r.label||"no description")+" "+penceText(r.pence); }
 function expRefOf(w, items, shortP){
   items=items||[];
-  const wk=load().weeks[w]||{};
+  const wk=pslot(w);
   if(wk.expRef){ const m=items.find(x=>x.key===wk.expRef); if(m) return expRefOb(m); }
   const hit=expMissing(items, shortP);
   if(hit && hit.exact && hit.items.length===1) return expRefOb(hit.items[0]);
@@ -1644,11 +1730,27 @@ const PL_LINES=[
   ["ssp","SSP (sick pay)","£",null],
   ["exp","Expenses","£",null]
 ];
+/* over a month the attendance allowance is however many weeks earned it, so it
+   is checked in pounds like expenses rather than as a yes/no */
+const PL_LINES_MONTH = PL_LINES.map(l=>l[0]==="att"?["att","Attendance allowance","\u00a3",null]:l);
+const plLines = k => isMonthlyKey(k) ? PL_LINES_MONTH : PL_LINES;
 const PL_HOURLY=["basic","hol","ot","sat","sun","bhw"];
 /* the nights line is called different things by different employers — one
    payment, or a night out with a meal voucher beside it */
 function plLabel(key,label,ds){ return key==="nights" ? nightLabel(ds) : label; }
 function plExpected(k,c){
+  if(isMonthlyKey(k)){
+    /* a month is its weeks added up, each at the rates of its own week */
+    const e={}, was=ytdBusy; ytdBusy=true;
+    try{
+      perWeeks(k).forEach(w=>{ const x=plExpected(w,calc(w));
+        for(const key in x){ const t=e[key]=e[key]||{units:0,cash:0};
+          t.cash+=x[key].cash; if(x[key].units!==null) t.units+=x[key].units; } });
+    } finally { ytdBusy=was; }
+    e.att={units:e.att.cash, cash:e.att.cash};   /* pounds over a month, not a yes/no */
+    e.ssp.units=null;
+    return e;
+  }
   const w=load().weeks[k]||{}, AT=k;
   const e={};
   e.basic ={units:dec(c.basicWorked),    cash:dec(c.basicWorked)*S("basicRate",AT)};
@@ -1663,22 +1765,23 @@ function plExpected(k,c){
   e.exp   ={units:c.expenses,            cash:c.expenses};
   return e;
 }
-function plActualCash(key,raw,AT){
+function plActualCash(key,raw,K){
   if(raw===null) return null;
-  const def=PL_LINES.find(l=>l[0]===key);
+  const AT=pAt(K);
+  const def=plLines(K).find(l=>l[0]===key);
   if(def[2]==="h")  return raw*S(def[3],AT);
   if(def[2]==="n")  return raw*nightRate(AT);
   if(def[2]==="yn") return raw?S("attendance",AT):0;
   return raw;
 }
-function plSaved(k){ return (load().weeks[k]||{}).payslip||{}; }
+function plSaved(k){ return pslot(k).payslip||{}; }
 function plHasAny(k){ const p=plSaved(k); return Object.keys(p).some(x=>p[x]!==""&&p[x]!==undefined&&p[x]!==null); }
 /* which line the money gap actually comes from — a figure entered on a
    line with no hours (nights, attendance, SSP) moves the pounds without
    moving the hours, which otherwise looks like it came from nowhere */
 function plGapSource(k,c){
   const p=plSaved(k), e=plExpected(k,c), out=[];
-  PL_LINES.forEach(([key,label])=>{
+  plLines(k).forEach(([key,label])=>{
     const raw=num(p[key]); if(raw===null) return;
     const g=plActualCash(key,raw,k)-e[key].cash;
     if(Math.abs(g)>=0.01) out.push({label,g});
@@ -1691,7 +1794,7 @@ function plGapSource(k,c){
 function plTotals(k,c){
   const p=plSaved(k), e=plExpected(k,c);
   let expH=0, slipH=0, expPay=0, slipPay=0;
-  PL_LINES.forEach(([key,,unit])=>{
+  plLines(k).forEach(([key,,unit])=>{
     const raw=num(p[key]);
     const theirs = raw===null ? e[key].cash : plActualCash(key,raw,k);
     expPay+=e[key].cash; slipPay+=theirs;
@@ -1744,11 +1847,11 @@ function plBlank(){ return {owed:0, from:null, credit:0, ref:null}; }
    render. nothing can be owed before the first week he ever entered a slip
    for, so start there. */
 function plCarryStart(k){
-  const d=load(), lim=addDays(k,-7*PL_BACK);
+  const lim = isMonthlyKey(k) ? "m"+addDays(k.slice(1),-366) : addDays(k,-7*PL_BACK);
   let first=null;
-  Object.keys(d.weeks).forEach(w=>{
+  pstoreKeys(k).forEach(w=>{
     if(w<lim || w>=k) return;
-    const wk=d.weeks[w];
+    const wk=pslot(w);
     if(wk.payslip || wk.wo || wk.chk || wk.att2){ if(!first || w<first) first=w; }
   });
   return first;
@@ -1759,22 +1862,23 @@ function plCarryIn(k){
   const first=plCarryStart(k);
   if(!first) return {};
   let st={};
-  for(let w=first; w<k; w=addDays(w,7)) st=plStep(w,st);
+  for(let w=first; w<k; w=pnext(w)) st=plStep(w,st);
   return st;
 }
 
 /* one week's effect on the ledger. takes what was owed coming in,
    returns what is owed going out. */
 function plStep(w,inSt){
-  const d=load(), wk=d.weeks[w]||{}, p=wk.payslip||{}, wo=wk.wo||{}, chk=wk.chk||{};
+  const wk=pslot(w), p=wk.payslip||{}, wo=wk.wo||{}, chk=wk.chk||{};
   const out={};
   /* an unpaid week carries no slip, so it says nothing about a debt. it
      passes shortfalls through untouched and lets any credit lapse. */
   const locked=plLocked(w);
-  const cw = locked ? null : calc(w);
+  let cw=null;
+  if(!locked){ if(isMonthlyKey(w)){ const was=ytdBusy; ytdBusy=true; try{ cw=pcalc(w); } finally{ ytdBusy=was; } } else cw=calc(w); }
   const e = locked ? null : plExpected(w,cw);
 
-  PL_LINES.forEach(([key,label,unit,rateKey])=>{
+  plLines(w).forEach(([key,label,unit,rateKey])=>{
     if(PL_CARRY.indexOf(key)<0) return;
     const inn = inSt[key] || plBlank();
     let owed = inn.owed, from = inn.from, ref = inn.ref || null;
@@ -1794,7 +1898,7 @@ function plStep(w,inSt){
       /* attendance is one a week, £50, so a missed one can never come back
          through this line. it only clears by being paid twice on a later
          slip, or by being written off. */
-      const A=S("attendance",w), raw=num(p[key]);
+      const A=S("attendance",pAt(w)), raw=num(p[key]);
       const paid = raw===null ? (e[key].units===1) : (raw===1);
       if(e[key].units===1 && !paid){ if(prevOwed===0) from=w; owed+=A; }
       if(wk.att2){
@@ -1853,7 +1957,7 @@ function shiftMonth(mk,n){ const d=new Date(+mk.slice(0,4),+mk.slice(5,7)-1+n,1)
 const MONTHNAME=["January","February","March","April","May","June","July","August","September","October","November","December"];
 function calCur(){ if(!calMonth) calMonth=monthKey(curDay); return calMonth; }
 let plWeek = null;   /* payslip tab tracks its own week, set on first render */
-function plCur(){ if(!plWeek) plWeek=lastPaidWeek(); return plWeek; }
+function plCur(){ if(!plWeek) plWeek=lastPaidPer(); return plWeek; }
 
 /* payday is the Friday after the week ends, or the Thursday
    before it if that Friday is a bank holiday */
@@ -1922,8 +2026,15 @@ function cumBasis(k){
   const d=load(), st=mondayOf(taxYearStart(k));
   const hand=SS("ytdFrom");
   let from, weeks, total=0;
+  const mh=modeHandFor(k);
 
-  if(hand && !ytdStale(k)){
+  if(mh){
+    /* v37: a handover made at a job change or a weekly/monthly switch */
+    total = Number(mh.taxable)||0;
+    from  = mh.start>st ? mh.start : st;
+    weeks = mh.full ? taxWeekOf(paydayOf(k))
+                    : (Number(mh.yrs)||0)*52 + Math.round((fromIso(k)-fromIso(from))/604800000)+1;
+  }else if(hand && !ytdStale(k)){
     total = Number(d.settings.ytdTaxable)||0;
     /* the week AFTER the one that slip paid for */
     from  = addDays(weekPaidOn(hand),7);
@@ -2009,7 +2120,7 @@ function taxFor(k, taxableThisWeek){
 /* the slip goes up on the portal the day before the money lands, so that is
    when the week opens for checking. the pay date itself does not move: the
    tax week is worked out from it, and it is what the slip is dated. */
-function slipOpens(k){ return addDays(paydayOf(k),-1); }
+function slipOpens(k){ return addDays(payOf(k),-1); }
 function plLocked(k){ return slipOpens(k) > iso(new Date()); }
 
 /* the last week whose slip is already up */
@@ -2023,6 +2134,255 @@ function lastPaidWeek(){
   return k;
 }
 
+/* ============ v37: weekly or monthly pay ============
+   ONE thing forks on the pay frequency: how weeks are grouped into pay periods
+   and how tax, NI, pension and student loan are worked out on them. the day
+   logging, the drivers' hours and the per-week pay lines are identical either
+   way — a monthly period is built from whole weeks, and every week is still
+   priced exactly as it always was.
+
+   a monthly period holds every week whose SUNDAY falls after the last cut-off
+   and on or before this one. payroll works off weekly timesheets, so a week
+   is never split across two months.
+
+   period keys: weekly is the Monday, as it always was. monthly is "m" plus the
+   cut-off date ("m2026-10-31"), so the two can never be mistaken for each other.
+
+   frequency eras work like rate eras: closed ones in settings.freqHist, each
+   ending on a Sunday; the open one is the live settings. */
+function freqHist(){ const h=load().settings.freqHist; return Array.isArray(h)?h:[]; }
+function freqAt(ds){
+  const h=freqHist();
+  for(let i=0;i<h.length;i++) if(h[i] && h[i].to && ds<=h[i].to) return h[i];
+  const s=load().settings;
+  return {freq:s.payFreq==="monthly"?"monthly":"weekly", payDate:s.payDate, payCut:s.payCut};
+}
+const daysIn=(y,m)=>new Date(y,m,0).getDate();           /* m is 1-12 */
+function dayIn(y,m,day){ return iso(new Date(y,m-1,Math.min(Math.max(1,Number(day)||31),daysIn(y,m)))); }
+/* the first cut-off on or after ds. a cut-off of 31 means the last day of every month */
+function cutAfter(ds,cut){
+  const y=+ds.slice(0,4), m=+ds.slice(5,7);
+  const a=dayIn(y,m,cut); if(a>=ds) return a;
+  const n=new Date(y,m,1); return dayIn(n.getFullYear(),n.getMonth()+1,cut);
+}
+const isMonthlyKey = k => typeof k==="string" && k.charAt(0)==="m";
+/* the pay period a week belongs to */
+function perOf(mon){
+  const sun=addDays(mon,6), f=freqAt(sun);
+  if(f.freq!=="monthly") return mon;
+  return "m"+cutAfter(sun,f.payCut);
+}
+function perWeeks(k){
+  if(!isMonthlyKey(k)) return [k];
+  const end=k.slice(1), base=mondayOf(end), out=[];
+  for(let m=addDays(base,-42); m<=addDays(base,7); m=addDays(m,7)) if(perOf(m)===k) out.push(m);
+  return out.length ? out : [base];
+}
+const perFirst = k => perWeeks(k)[0];
+const perLast  = k => { const w=perWeeks(k); return w[w.length-1]; };
+const pnext = k => perOf(addDays(perLast(k),7));
+const pprev = k => perOf(addDays(perFirst(k),-7));
+/* the date employer rates are read at for a period — its last week */
+const pAt = k => isMonthlyKey(k) ? perLast(k) : k;
+/* paid on the chosen day, on or after the cut-off. a weekend or bank holiday
+   moves it to the working day before, the way banks pay. */
+function monthlyPayday(end,payDate){
+  const y=+end.slice(0,4), m=+end.slice(5,7);
+  const pd=Number(payDate)||Number(end.slice(8,10));
+  let p=dayIn(y,m,pd);
+  if(p<end){ const n=new Date(y,m,1); p=dayIn(n.getFullYear(),n.getMonth()+1,pd); }
+  while(BH.has(p) || dowIndex(p)>=5) p=addDays(p,-1);
+  return p;
+}
+function payOf(k){
+  if(!isMonthlyKey(k)) return paydayOf(k);
+  return monthlyPayday(k.slice(1), freqAt(addDays(perLast(k),6)).payDate);
+}
+function perLabel(k){
+  const p=payOf(k);
+  return "paid "+DAYSHORT[dowIndex(p)]+" "+shortDate(p);
+}
+/* where a period's payslip figures, write-offs and ticks live */
+function pslot(k,create){
+  const d=load();
+  if(!isMonthlyKey(k)){
+    if(create) return d.weeks[k]=d.weeks[k]||{};
+    return d.weeks[k]||{};
+  }
+  if(create){ d.months=d.months||{}; return d.months[k]=d.months[k]||{}; }
+  return (d.months||{})[k]||{};
+}
+function pstoreKeys(k){ const d=load(); return Object.keys(isMonthlyKey(k)?(d.months||{}):d.weeks); }
+const pWord  = k => isMonthlyKey(k) ? "month" : "week";
+/* the word for the period a week is paid in — "week" or "month" */
+const perWordOf = mon => pWord(perOf(mon));
+
+/* the last period whose slip is already up */
+function lastPaidPer(){
+  const today=iso(new Date());
+  let k=perOf(mondayOf(today));
+  for(let i=0;i<70;i++){
+    if(slipOpens(k)<=today) return k;
+    k=pprev(k);
+  }
+  return k;
+}
+
+/* ---- the money for a whole period ---- */
+const PER_YEAR = k => isMonthlyKey(k) ? 12 : 52;
+const SCALE    = k => 52/PER_YEAR(k);      /* weekly thresholds -> this period */
+function studentLoanP(niable, per){
+  const p=SL_PLANS[SS("slPlan")||""];
+  if(!p) return 0;
+  return Math.max(0, Math.floor((niable-p.annual/per)*p.rate/100));
+}
+function taxMonthNC(taxable){
+  const p=parseTaxCode(SS("taxCode")) || parseTaxCode(DEFAULTS.taxCode);
+  if(p.kind==="none") return 0;
+  if(p.kind==="flat") return r2(Math.max(0,taxable)*p.rate/100);
+  const f=52/12;
+  return r2(bandTax(Math.max(0, taxable - p.free*f), f));
+}
+/* tax month 1 runs 6 April to 5 May */
+function taxMonthOf(ds){
+  const st=taxYearStart(ds), y0=+st.slice(0,4);
+  const y=+ds.slice(0,4), m=+ds.slice(5,7), d=+ds.slice(8,10);
+  let n=(y-y0)*12+(m-4); if(d<6) n--;
+  return n+1;
+}
+/* a handover made at a job change or a switch between weekly and monthly.
+   it stands in for everything paid up to and including `from`. */
+function modeHandFor(k){
+  const mh=load().settings.modeHand;
+  if(!mh || !mh.from) return null;
+  const pay=payOf(k);
+  if(pay<=mh.from) return null;
+  if(taxYearStart(mh.from)!==taxYearStart(pay)) return null;
+  /* a P45 figure typed in Settings AFTER the switch is newer, and wins */
+  const typed=SS("ytdFrom");
+  if(typed && typed>mh.from && typed<pay && taxYearStart(typed)===taxYearStart(pay)) return null;
+  return mh;
+}
+/* the year-to-date basis for a monthly period — same idea as cumBasis */
+function cumBasisM(k){
+  const pay=payOf(k), st=taxYearStart(pay);
+  const mh=modeHandFor(k);
+  const typed=SS("ytdFrom");
+  const useTyped = !mh && typed && typed<pay && taxYearStart(typed)===st;
+  const after = mh ? mh.from : useTyped ? typed : null;
+  /* every monthly period in this tax year up to k, paid after the handover */
+  const ks=[];
+  for(let x=k, i=0; i<14; i++, x=pprev(x)){
+    if(!isMonthlyKey(x)) break;
+    const px=payOf(x);
+    if(taxYearStart(px)!==st) break;
+    if(after && px<=after) break;
+    ks.unshift(x);
+  }
+  let total=0, n;
+  /* without a handover, count from the first period with anything actually
+     LOGGED in it — the same rule as the weekly side. a month with nothing but
+     a bank holiday in it is not a month he worked. */
+  let first=null;
+  if(!mh && !useTyped){
+    const d=load();
+    for(const x of ks){
+      const ws=perWeeks(x);
+      const hit=ws.some(w=>{ for(let i=0;i<7;i++) if(d.days[addDays(w,i)]) return true; return !!d.weeks[w]; }) || !!(d.months||{})[x];
+      if(hit){ first=x; break; }
+    }
+    if(first===null) return null;
+    ks.splice(0, ks.indexOf(first));
+  }
+  const was=ytdBusy; ytdBusy=true;
+  try{
+    ks.forEach(x=>{ const c=pcalc(x); if(c.hasData) total+=c.taxable; });
+  } finally { ytdBusy=was; }
+  if(mh){
+    total+=Number(mh.taxable)||0;
+    n = mh.full ? taxMonthOf(pay) : (Number(mh.yrs)||0)*12 + ks.length;
+  }else if(useTyped){
+    total+=Number(load().settings.ytdTaxable)||0;
+    n = taxMonthOf(pay);
+  }else{
+    n = ks.length;
+  }
+  if(n<=0) return null;
+  return {cum:r2(total), n};
+}
+function taxForM(k, taxable){
+  const p=parseTaxCode(SS("taxCode")) || parseTaxCode(DEFAULTS.taxCode);
+  if(p.kind==="none") return 0;
+  if(p.kind==="flat") return r2(Math.max(0,taxable)*p.rate/100);
+  if(ytdBusy) return taxMonthNC(taxable);
+  const b=cumBasisM(k);
+  if(!b) return taxMonthNC(taxable);
+  const f=52/12, prev=r2(b.cum-taxable);
+  const dueNow  = bandTax(Math.max(0, b.cum - p.free*f*b.n), b.n*f);
+  const duePrev = b.n>1 ? bandTax(Math.max(0, prev - p.free*f*(b.n-1)), (b.n-1)*f) : 0;
+  return r2(Math.max(0, dueNow-duePrev));
+}
+/* the deductions chain for one period, weekly or monthly. weekly never comes
+   through here — calc() and plMoney() keep their own, untouched. */
+function perMoney(k, pensionable, untaxedAdd, attPay, expenses, cum){
+  const f=SCALE(k);
+  const qual=Math.max(0,Math.min(pensionable,S("pensionUpper")*f)-S("pensionLower")*f);
+  const pension=r2(qual*S("pensionRate")/100);
+  const beforePension=pensionable+untaxedAdd+attPay+expenses;
+  const cash=beforePension-pension;
+  const bik=S("bikOn") ? S("bik")*f : 0;
+  const taxable=cash+bik-untaxedAdd-expenses;
+  const niable=taxable-bik;
+  const tax=cum ? taxForM(k,taxable) : taxMonthNC(taxable);
+  const sloan=studentLoanP(niable, PER_YEAR(k));
+  const niMain=Math.max(0,Math.min(niable,S("niUpper")*f)-S("niFree")*f)*S("niRate")/100;
+  const niUp=Math.max(0,niable-S("niUpper")*f)*S("niRate2")/100;
+  const ni=r2(niMain+niUp);
+  return {beforePension, pension, pensionable, cash, taxable, tax, ni, sloan, net:cash-tax-ni-sloan};
+}
+/* everything calc() gives for a week, for a whole period. weekly is calc(). */
+const MONEY_KEYS=["beforePension","pension","pensionable","cash","taxable","tax","ni","sloan","net"];
+function pcalc(k){
+  if(!isMonthlyKey(k)) return calc(k);
+  const ws=perWeeks(k);
+  let cs;
+  const was=ytdBusy; ytdBusy=true;     /* the weeks' own tax is thrown away */
+  try{ cs=ws.map(w=>calc(w)); } finally { ytdBusy=was; }
+  const out={weeks:ws, monthly:true};
+  cs.forEach(c=>{
+    for(const key in c){
+      const v=c[key];
+      if(key==="lines"||MONEY_KEYS.indexOf(key)>=0) continue;
+      if(typeof v==="number") out[key]=(out[key]||0)+v;
+      else if(typeof v==="boolean") out[key]=out[key]||v;
+      else if(Array.isArray(v)) out[key]=(out[key]||[]).concat(v);
+      else if(!(key in out)) out[key]=v;
+    }
+  });
+  /* receipts are named by date in a month, not by weekday */
+  out.expItems=(out.expItems||[]).map(x=>Object.assign({},x,{mo:1}));
+  /* the pay lines, merged */
+  const L=[], at={};
+  cs.forEach(c=>c.lines.forEach(l=>{
+    if(!(l.key in at)){ at[l.key]=L.length; L.push({key:l.key,name:l.name,units:l.units,cash:0,_u:0,_dec:false,_num:false}); }
+    const t=L[at[l.key]];
+    t.cash+=l.cash;
+    if(l.units!==""&&l.units!==null&&l.units!==undefined){
+      t._num=true; t._u+=Number(l.units)||0;
+      if(typeof l.units==="string" && /\./.test(l.units)) t._dec=true;
+    }
+  }));
+  L.forEach(t=>{ t.units = t._num ? (t._dec ? t._u.toFixed(2) : t._u) : ""; delete t._u; delete t._dec; delete t._num; });
+  out.lines=L;
+  const pens=cs.reduce((a,c)=>a+c.pensionable,0);
+  const bp=cs.reduce((a,c)=>a+c.beforePension,0);
+  const untaxed=bp-pens-(out.attPay||0)-(out.expenses||0);
+  Object.assign(out, perMoney(k, pens, untaxed, out.attPay||0, out.expenses||0, true));
+  out.hasData = cs.some(c=>c.hasData);
+  out.dates = [].concat(...cs.map(c=>c.dates));
+  return out;
+}
+
 /* ============ header + hero ============ */
 /* take-home so far this week. with nothing logged at all it shows a dash:
    the deductions would otherwise read as a loss on an empty week. a thin
@@ -2030,6 +2390,13 @@ function lastPaidWeek(){
 function heroNet(fig,sub,c){
   fig.className="fig one";
   const est=document.getElementById("heroEst");
+  if(c.hasData && isMonthlyKey(perOf(c.dates[0]))){
+    const p0=c.beforePension.toFixed(2).split(".");
+    fig.innerHTML="\u00a3"+(+p0[0]).toLocaleString("en-GB")+"<small>."+p0[1]+"</small>";
+    if(est) est.style.display="";
+    sub.textContent="earned this week, before deductions";
+    return;
+  }
   if(!c.hasData){
     fig.innerHTML="\u2014";
     if(est) est.style.display="none";
@@ -2059,8 +2426,8 @@ function render(){
     T.textContent=dEl?dEl.dataset.title:"Settings";
     U.textContent="everything stays on this phone";
   }else if(tab==="pay"){
-    T.textContent=shortDate(plCur())+" – "+shortDate(addDays(plCur(),6));
-    U.textContent=paydayLabel(plCur());
+    T.textContent=shortDate(perFirst(plCur()))+" – "+shortDate(addDays(perLast(plCur()),6));
+    U.textContent=perLabel(plCur());
   }else if(tab==="history"){
     T.textContent="History";
     U.textContent="every week you have logged";
@@ -2074,7 +2441,7 @@ function render(){
   const TB=document.getElementById("todayBtn");
   const here = tab==="day"     ? curDay===iso(new Date())
              : tab==="week"    ? cur()===mondayOf(iso(new Date()))
-             : tab==="pay"     ? plCur()===lastPaidWeek()
+             : tab==="pay"     ? plCur()===lastPaidPer()
              : tab==="cal"     ? calCur()===monthKey(iso(new Date()))
              : false;
   TB.classList.toggle("here", here);
@@ -2116,8 +2483,11 @@ function render(){
        through at face value and scale only what the taxman actually sees. */
     const untaxed = x => x.nights*nightRate(cur()) + x.expenses;
     const dayFree = untaxed(c)-untaxed(cx);
-    const weekTaxed = c.beforePension-untaxed(c);
-    const keepRate = weekTaxed>0 ? (c.net-untaxed(c))/weekTaxed : 1;
+    /* v37: on monthly pay the deductions come off the month, so the keep-rate
+       and the right-hand figure are the month's. weekly is c, as before. */
+    const pk=perOf(cur()), P = isMonthlyKey(pk) ? pcalc(pk) : c, pw=pWord(pk);
+    const weekTaxed = P.beforePension-untaxed(P);
+    const keepRate = weekTaxed>0 ? (P.net-untaxed(P))/weekTaxed : 1;
     const dayNet = dayGross===null||!c.beforePension ? null
                  : dayFree + (dayGross-dayFree)*keepRate;
     const dayLogged = mins>0 || (BH.has(curDay)&&dowIndex(curDay)<5) || !!r.hol || !!r.sick || !!r.unp || !!r.night;
@@ -2126,10 +2496,10 @@ function render(){
       "<span class=\"f\"><span class=\"n\">"+(dayLogged&&dayNet!==null?money2(dayNet):"\u2014")+"</span>"+
         (dayLogged&&dayNet!==null?"<span class=\"estb\">estimate</span>":"")+
         "<span class=\"lbl\">today's take home</span></span>"+
-      "<span class=\"f r\"><span class=\"n\">"+(c.hasData?money2(c.net):"\u2014")+"</span>"+
-        (c.hasData?"<span class=\"estb\">estimate</span>":"")+
-        "<span class=\"lbl\">week's take home</span></span>";
-    sub.textContent = c.hasData ? "" : "nothing logged this week yet";
+      "<span class=\"f r\"><span class=\"n\">"+(P.hasData?money2(P.net):"\u2014")+"</span>"+
+        (P.hasData?"<span class=\"estb\">estimate</span>":"")+
+        "<span class=\"lbl\">"+pw+"'s take home</span></span>";
+    sub.textContent = P.hasData ? "" : "nothing logged this "+pw+" yet";
     sub.style.display = sub.textContent ? "" : "none";
     strip.innerHTML="";
   }else if(tab==="cal"){
@@ -2144,7 +2514,7 @@ function render(){
     sub.textContent=""; sub.style.display="none";
     strip.innerHTML="";
   }else if(tab==="pay"){
-    const pc=calc(plCur()), t=plTotals(plCur(),pc);
+    const pc=pcalc(plCur()), t=plTotals(plCur(),pc);
     const gap=t.slipPay-t.expPay, gh=t.slipH-t.expH;
     /* an unpaid week has no slip to be "expected" against — say predicted */
     const pw=plLocked(plCur())?"predicted":"expected";
@@ -2160,7 +2530,7 @@ function render(){
     strip.innerHTML= plLocked(plCur())
       ? "<span class=\"s\"><span class=\"v\">"+n2(t.expH)+"h</span><span class=\"k\">logged</span></span>"+
         "<span class=\"s\"><span class=\"v\">"+pc.nights+"</span><span class=\"k\">nights</span></span>"+
-        "<span class=\"s\"><span class=\"v\">"+DAYSHORT[dowIndex(paydayOf(plCur()))]+" "+shortDate(paydayOf(plCur()))+"</span><span class=\"k\">payday</span></span>"
+        "<span class=\"s\"><span class=\"v\">"+DAYSHORT[dowIndex(payOf(plCur()))]+" "+shortDate(payOf(plCur()))+"</span><span class=\"k\">payday</span></span>"
       :
       "<span class=\"s\"><span class=\"v\">"+n2(t.expH)+"h"+"</span><span class=\"k\">logged</span></span>"+
       "<span class=\"s\"><span class=\"v\">"+n2(t.slipH)+"h"+"</span><span class=\"k\">on the slip</span></span>"+
@@ -2189,7 +2559,7 @@ function render(){
   if(tab==="week"){   renderWeek(c); renderLedger(c); }
   if(tab==="hours")   renderHours(c);
   if(tab==="cal")     renderCal();
-  if(tab==="pay"){    renderPayslip(calc(plCur())); renderHistory(); }
+  if(tab==="pay"){    renderPayslip(pcalc(plCur())); renderHistory(); }
   if(tab==="history") renderHistory();
   if(tab==="more"){   renderSetup(); renderBackup(); renderBH(); renderReceiptsDoor(); renderSetList(); }
 }
@@ -2295,7 +2665,11 @@ function renderDay(c){
     ? "pays £"+n2(sickRate)+attMiss
     : "no rate set"+attMiss;
 
+  const nudge = SNOW("basicRate")>0 ? "" :
+    `<button class="rbill" data-nudge="1"><span class="t">No pay rates yet</span><span class="s">Tap to set up your pay, or the money figures stay at nothing.</span></button>`;
   box.innerHTML=`
+    ${nudge}
+    ${restOwedBill(curDay)}
     ${pill}
     ${r.sick&&!worked?`<p class="note" style="margin-top:14px">Off sick. ${sickRate?"It pays £"+n2(sickRate)+" for the day.":"No daily rate is set, so nothing is predicted — type what the slip says on the week view."}${attAmt>0?" It does <b>not</b> keep your attendance allowance.":""}</p>`:""}
     ${isBH?`<p class="note" style="margin-top:14px">Bank holiday. Leave it blank and it pays ${S("bhHours",curDay)} hours at the basic rate. Put times in and it pays at the Sunday rate instead, minimum ${S("sunMin",curDay)} hours.${curDay>iso(new Date())&&worked===0?` <b>Not in the week total yet</b> — it counts from ${shortDate(curDay)}.`:""}</p>`:""}
@@ -2459,6 +2833,8 @@ function renderDay(c){
   });
   box.querySelector("#toWeek").addEventListener("click",()=>switchTab("week"));
   box.querySelector("#hPill").addEventListener("click",()=>switchTab("hours"));
+  box.querySelectorAll("[data-nudge]").forEach(b=>b.addEventListener("click",()=>setupOpen("new")));
+  box.querySelectorAll("[data-rbill]").forEach(b=>b.addEventListener("click",()=>switchTab("hours")));
 }
 
 /* ============ week view ============ */
@@ -2554,6 +2930,11 @@ function renderLedger(c){
   const box=document.getElementById("ledger");
   let h="";
   c.lines.forEach(l=>{ h+=`<div class="lrow"><span class="d">${l.name}</span><span class="u">${l.units}</span><span class="c">${n2(l.cash)}</span></div>`; });
+  if(isMonthlyKey(perOf(c.dates[0]))){
+    h+=`<div class="lrow tot"><span class="d">Earned this week</span><span class="u"></span><span class="c">${n2(c.beforePension)}</span></div>`;
+    h+=`<p class="note">You are paid monthly, so tax, NI and pension come off the whole month. The Payday tab shows the month.</p>`;
+    box.innerHTML=h; return;
+  }
   h+=`<div class="lrow neg"><span class="d">Pension</span><span class="u"></span><span class="c">−${n2(c.pension)}</span></div>`;
   h+=`<div class="lrow tot"><span class="d">Payments</span><span class="u"></span><span class="c">${n2(c.cash)}</span></div>`;
   h+=`<div class="lrow"><span class="d">Taxable pay</span><span class="u"></span><span class="c">${n2(c.taxable)}</span></div>`;
@@ -2588,6 +2969,7 @@ function renderHours(c){
   document.getElementById("dhWeek").innerHTML=dh.join("");
 
   const rest=[];
+  { const t=iso(new Date()); const b=restOwedBill(cur()<=t && t<=addDays(cur(),6) ? t : addDays(cur(),6)); if(b) rest.push(b); }
   const redUsed=reducedSinceWeekly(addDays(cur(),6));
   rest.push(stat("Reduced daily rests",redUsed+" / 3 used",
     (3-redUsed)>0?(3-redUsed)+" left before your next weekly rest":"none left — 11 hours needed now",redUsed/3));
@@ -2654,25 +3036,25 @@ function renderPayslip(c){
   box.className = locked ? "prov" : "";
   if(locked) box.innerHTML=
     `<div class="lock"><span>&#9432;</span><span>Predicted only &mdash; <b>not paid until `
-    + DAYSHORT[dowIndex(paydayOf(k))] + " " + shortDate(paydayOf(k))
+    + DAYSHORT[dowIndex(payOf(k))] + " " + shortDate(payOf(k))
     + `</b>. You can look, but figures cannot be entered until the slip arrives.</span></div>`;
 
-  PL_LINES.forEach(([key,label0,unit,rateKey])=>{
-    const label=plLabel(key,label0,k);
+  plLines(k).forEach(([key,label0,unit,rateKey])=>{
+    const label=plLabel(key,label0,pAt(k));
     const exp=e[key];
     const raw=num(p[key]);
     const cin=carryIn[key]||plBlank(), cout=carryOut[key]||plBlank();
     /* a write-off is recorded against this week, so it has to be honoured
        here as well as downstream — otherwise the strip he just dismissed
        sits there until the week rolls over. */
-    const wroteOff=!!(((d.weeks[k]||{}).wo||{})[key]);
+    const wroteOff=!!((pslot(k).wo||{})[key]);
     const owed=wroteOff?0:cin.owed, credit=cin.credit;
     const row=document.createElement("div");
     row.className="pl"+(raw===null?"":" has");
     if(unit==="n"){
       /* the slider running to twelve is not arbitrary — a week they miss
          entirely is up to six, so two weeks' worth has to fit on it. */
-      const tick  = !!((d.weeks[k]||{}).chk||{}).nights;
+      const tick  = !!(pslot(k).chk||{}).nights;
       const tgt   = exp.units + owed;
       const v     = raw===null ? tgt : raw;
       const seen  = raw!==null || tick;
@@ -2685,26 +3067,26 @@ function renderPayslip(c){
           seen ? (g!==0 ? "checked against the slip · does not match"
                         : (raw===null ? "checked against the slip · matches" : "checked against the slip"))
                : "tap when you have checked this against the slip"}</span></div>
-        ${g===null||g===0?"":`<div class="sub">${(g>0?"+":"−")+Math.abs(g)+" · "+(g>0?"+":"−")+money(Math.abs(g)*nightRate(k))}</div>`}`;
+        ${g===null||g===0?"":`<div class="sub">${(g>0?"+":"−")+Math.abs(g)+" · "+(g>0?"+":"−")+money(Math.abs(g)*nightRate(pAt(k)))}</div>`}`;
 
     }else if(unit==="yn"){
       const paid = raw===null ? exp.units===1 : raw===1;
       const g = raw===null ? null : (raw?1:0)-exp.units;
-      const twice = !!(d.weeks[k]||{}).att2;
+      const twice = !!pslot(k).att2;
       row.innerHTML=`
-        <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">expected ${exp.units?"yes":"no"}${owed?" +"+money(owed)+" owed":""} · ${money(exp.cash+(twice?S("attendance",k):0))}</span></div>
+        <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">expected ${exp.units?"yes":"no"}${owed?" +"+money(owed)+" owed":""} · ${money(exp.cash+(twice?S("attendance",pAt(k)):0))}</span></div>
         <div class="bot">
           <button class="tk${raw===null?"":(g===0?" on":" no")}" data-tgt="${exp.units?1:0}">${raw!==null&&g!==0?"&#10007;":"&#10003;"}</button>
           <button class="chip ynb${paid?" on":""}">${paid?"on the slip":"not on the slip"}</button>
           <span class="gap" style="color:${g===null?"var(--dim)":g===0?"var(--green)":"var(--red)"}">${
-            g===null?"—":g===0?"ok":(g>0?"+":"−")+money(S("attendance",k))}</span>
+            g===null?"—":g===0?"ok":(g>0?"+":"−")+money(S("attendance",pAt(k)))}</span>
         </div>`;
 
     }else if(unit==="h"){
       const shown = raw===null ? "" : p[key];
       const tgt   = exp.units + owed;
       const gapH  = raw===null ? null : raw-tgt;
-      const gapP  = raw===null ? null : gapH*S(rateKey,k);
+      const gapP  = raw===null ? null : gapH*S(rateKey,pAt(k));
       row.innerHTML=`
         <div class="top"><span class="nm">${label}${raw===null?"":" <i class=\"ent\">entered</i>"}</span><span class="exp">logged ${n2(exp.units)} h${owed?" <i class=\"owetag\">+"+n2(owed)+" owed</i>":""}</span></div>
         <div class="bot">
@@ -2716,7 +3098,7 @@ function renderPayslip(c){
           }</span>
         </div>
         ${gapH!==null&&Math.abs(gapH)>=0.005
-          ? `<div class="sub">${(gapP>0?"+":"−")+money(Math.abs(gapP))} at ${money(S(rateKey,k))} an hour</div>`
+          ? `<div class="sub">${(gapP>0?"+":"−")+money(Math.abs(gapP))} at ${money(S(rateKey,pAt(k)))} an hour</div>`
           : ""}`;
 
     }else{
@@ -2756,7 +3138,7 @@ function renderPayslip(c){
           +(on?`<i class="upc">&#9679; unpaid, carried over</i>`:"")
           +`</span><span>${penceText(x.pence)}</span>`;
         if(pickable) li.addEventListener("click",()=>{
-          const w=d.weeks[k]=d.weeks[k]||{};
+          const w=pslot(k,true);
           if(w.expRef===x.key) delete w.expRef; else w.expRef=x.key;
           save(); render();
         });
@@ -2814,20 +3196,20 @@ function renderPayslip(c){
                   : `nothing outstanding on this line`;
       }else if(owed>0 && cout.owed>0 && cout.owed<owed){
         head=`<span class="sh">${unitTxt(cout.owed)}</span><span class="sd">still owed — ${unitTxt(owed-cout.owed)} of the ${unitTxt(owed)} came through</span>`;
-        body=`carried into next week`;
+        body=`carried into next ${pWord(k)}`;
       }else if(owed>0){
         cls += unit==="yn" ? " miss" : "";
         head=`<span class="sh">${unitTxt(owed)}</span><span class="sd">owed from ${prettyDate(cin.from||k)}${rIn?" — "+esc(rIn)+rcKeyButton(cin.ref.key):""}</span>`;
         body= unit==="yn"
           ? `only ever one a week, so it cannot come back through this line`
-          : `expecting <b>${unitTxt(exp.units+owed)}</b> in total — ${unitTxt(exp.units)} this week, ${unitTxt(owed)} owed`;
+          : `expecting <b>${unitTxt(exp.units+owed)}</b> in total — ${unitTxt(exp.units)} this ${pWord(k)}, ${unitTxt(owed)} owed`;
       }else if(cout.owed>0){
         head=`<span class="sh">${unitTxt(cout.owed)}</span><span class="sd">short on this slip${rOut?" — "+esc(rOut)+rcKeyButton(cout.ref.key):""}</span>`;
-        body=`carried into next week`;
+        body=`carried into next ${pWord(k)}`;
       }else{
         cls+=" over"; acts=false;
         head=`<span class="sh">${unitTxt(cout.credit)}</span><span class="sd">more than logged — noted, not chased</span>`;
-        body=`if next week comes up short by this, that is them taking it back. otherwise it lapses.`;
+        body=`if next ${pWord(k)} comes up short by this, that is them taking it back. otherwise it lapses.`;
       }
 
       st.className=cls;
@@ -2835,18 +3217,18 @@ function renderPayslip(c){
       if(acts){
         const bar=document.createElement("div");
         bar.className="oact";
-        if(unit==="yn" && owed>0 && !(d.weeks[k]||{}).att2){
+        if(unit==="yn" && owed>0 && !pslot(k).att2){
           const b2=document.createElement("button");
           b2.className="wo full"; b2.textContent="paid twice this week";
           b2.addEventListener("click",()=>{
-            const w=d.weeks[k]=d.weeks[k]||{}; w.att2=1; save(); render();
+            const w=pslot(k,true); w.att2=1; save(); render();
           });
           bar.appendChild(b2);
         }
         const bw=document.createElement("button");
         bw.className="wo"; bw.textContent="write off";
         bw.addEventListener("click",()=>{
-          const w=d.weeks[k]=d.weeks[k]||{}; w.wo=w.wo||{}; w.wo[key]=1; save(); render();
+          const w=pslot(k,true); w.wo=w.wo||{}; w.wo[key]=1; save(); render();
         });
         bar.appendChild(bw);
         st.appendChild(bar);
@@ -2855,7 +3237,7 @@ function renderPayslip(c){
     }
 
     const commit=v=>{
-      const w=d.weeks[k]=d.weeks[k]||{};
+      const w=pslot(k,true);
       w.payslip=w.payslip||{};
       if(v==="") delete w.payslip[key]; else w.payslip[key]=v;
       save(); render();
@@ -2884,7 +3266,7 @@ function renderPayslip(c){
         /* landing on the number the app expects — including anything owed —
            means "agrees", so nothing is stored. dragging is itself an act of
            checking, so it ticks the confirmation too. */
-        const w=d.weeks[k]=d.weeks[k]||{}; w.chk=w.chk||{}; w.chk.nights=1;
+        const w=pslot(k,true); w.chk=w.chk||{}; w.chk.nights=1;
         commit(v===exp.units+owed ? "" : String(v));
       });
     }
@@ -2894,7 +3276,7 @@ function renderPayslip(c){
     const ck=row.querySelector(".ckb");
     if(ck && locked) ck.disabled=true;
     if(ck && !locked) ck.addEventListener("click",()=>{
-      const w=d.weeks[k]=d.weeks[k]||{}; w.chk=w.chk||{};
+      const w=pslot(k,true); w.chk=w.chk||{};
       if(w.chk.nights){ delete w.chk.nights; if(!Object.keys(w.chk).length) delete w.chk; }
       else w.chk.nights=1;
       save(); render();
@@ -2916,7 +3298,7 @@ function renderPayslip(c){
               || owed>0 || cin.credit>0 || cout.owed>0 || cout.credit>0;
     /* no allowance in this job's rates: the line is worth nothing either way,
        so it goes — unless an old week still owes or overpaid one */
-    const attGone = key==="att" && !(S("attendance",k)>0)
+    const attGone = key==="att" && !(S("attendance",pAt(k))>0)
                  && !(owed>0 || cin.credit>0 || cout.owed>0 || cout.credit>0);
     if(attGone) return;
     if(live) box.appendChild(row); else { hid.appendChild(row); hidN++; }
@@ -2942,7 +3324,7 @@ function renderPayslip(c){
      like it agreed with figures nobody had ever looked at. */
   const t=plTotals(k,c);
   const hGap=t.slipH-t.expH, pGap=t.slipPay-t.expPay;
-  const wkc=d.weeks[k]||{};
+  const wkc=pslot(k);
   /* a line counts as checked when a figure was typed or a tick stored one.
      nights are a slider, so they carry their own confirmation flag. */
   const conf=key=> num(p[key])!==null || (key==="nights" && !!(wkc.chk||{}).nights);
@@ -2951,7 +3333,7 @@ function renderPayslip(c){
   const mny=v=>(v<-0.005?"\u2212":"")+"\u00a3"+n2(Math.abs(v));
 
   const mine={}, mineU={}, theirs={}, theirsU={};
-  PL_LINES.forEach(([key])=>{
+  plLines(k).forEach(([key])=>{
     const raw=num(p[key]);
     mine[key]=e[key].cash; mineU[key]=e[key].units;
     if(!conf(key)){ theirs[key]=null; theirsU[key]=null; return; }
@@ -2960,12 +3342,12 @@ function renderPayslip(c){
   });
   /* a line shows if the app expects something on it or he has checked it */
   const live=([key])=>Math.abs(mine[key])>=0.005 || conf(key);
-  const shownK=PL_LINES.filter(live).map(l=>l[0]);
+  const shownK=plLines(k).filter(live).map(l=>l[0]);
   const allConf = shownK.length>0 && shownK.every(conf);
-  const allConfH = PL_LINES.filter(l=>l[2]==="h").filter(live).map(l=>l[0]).every(conf);
+  const allConfH = plLines(k).filter(l=>l[2]==="h").filter(live).map(l=>l[0]).every(conf);
   /* the deduction chain needs a full set of figures, so unchecked lines fall
      back to what was logged — those rows only ever show once every line is in. */
-  const forMoney={}; PL_LINES.forEach(([key])=>{ forMoney[key]= theirs[key]===null?mine[key]:theirs[key]; });
+  const forMoney={}; plLines(k).forEach(([key])=>{ forMoney[key]= theirs[key]===null?mine[key]:theirs[key]; });
   const mM=plMoney(k,mine,!locked), mT=plMoney(k,forMoney,!locked);
 
   const cell=(cls,top,bot)=>`<span class="${cls}">${top}${bot?`<i class="m">${bot}</i>`:""}</span>`;
@@ -2978,15 +3360,15 @@ function renderPayslip(c){
          `<span class="c">slip</span><span class="g">diff</span></div>`;
 
   const slipH = allConfH
-    ? PL_LINES.reduce((a,[key,,unit])=> unit==="h" && theirsU[key]!==null ? a+theirsU[key] : a, 0)
+    ? plLines(k).reduce((a,[key,,unit])=> unit==="h" && theirsU[key]!==null ? a+theirsU[key] : a, 0)
     : null;
   const phG = slipH===null ? null : slipH-t.expH;
   ih+=`<div class="lrow"><span class="d">Paid hours</span><span class="u">${n2(t.expH)}</span>`+
       `<span class="c">${slipH===null?"\u2014":n2(slipH)}</span>`+
       `<span class="g" style="color:${phG===null?"var(--dim)":dcol(phG)}">${phG===null?"\u2014":dtxt(phG)}</span></div>`;
 
-  PL_LINES.forEach(([key,label0,unit])=>{
-    const label=plLabel(key,label0,k);
+  plLines(k).forEach(([key,label0,unit])=>{
+    const label=plLabel(key,label0,pAt(k));
     if(!live([key])) return;
     const isU = unit==="h" || unit==="n";
     const fu = v=> unit==="h" ? n2(v) : String(v);
@@ -3032,12 +3414,12 @@ function renderPayslip(c){
     .forEach(b=>b.addEventListener("click",goRates));
 
   const worst=[];
-  PL_LINES.forEach(([key,label0,unit,rateKey])=>{
-    const label=plLabel(key,label0,k);
+  plLines(k).forEach(([key,label0,unit,rateKey])=>{
+    const label=plLabel(key,label0,pAt(k));
     const raw=num(p[key]); if(raw===null) return;
     if(unit==="h"){
       const gh=raw-e[key].units;
-      if(Math.abs(gh)>=0.005) worst.push({label,gh,gp:gh*S(rateKey,k)});
+      if(Math.abs(gh)>=0.005) worst.push({label,gh,gp:gh*S(rateKey,pAt(k))});
     }else{
       const gp=plActualCash(key,raw,k)-e[key].cash;
       if(Math.abs(gp)>=0.01) worst.push({label,gh:null,gp});
@@ -3049,8 +3431,8 @@ function renderPayslip(c){
      overwrite a figure typed by hand. the nights row is a slider rather than
      a box, so it is confirmed through its own tick instead. */
   const ab=document.getElementById("plAll");
-  const empties=PL_LINES.filter(([key,,unit])=>num(p[key])===null
-                   && !(unit==="n" && ((d.weeks[k]||{}).chk||{}).nights));
+  const empties=plLines(k).filter(([key,,unit])=>num(p[key])===null
+                   && !(unit==="n" && (pslot(k).chk||{}).nights));
   ab.textContent = empties.length
     ? "\u2713 Everything matches — fill in the "+empties.length+" line"+(empties.length===1?"":"s")+" left"
     : "Every line has been checked";
@@ -3059,15 +3441,15 @@ function renderPayslip(c){
 
   const cb=document.getElementById("plClear");
   const n=Object.keys(p).filter(x=>p[x]!==""&&p[x]!==undefined&&p[x]!==null).length;
-  cb.textContent = n ? "Clear the "+n+" figure"+(n===1?"":"s")+" entered for this week"
-                     : "Nothing entered for this week";
+  cb.textContent = n ? "Clear the "+n+" figure"+(n===1?"":"s")+" entered for this "+pWord(k)
+                     : "Nothing entered for this "+pWord(k);
   cb.disabled = !n;
   cb.style.opacity = n ? "1" : ".45";
 
   const note=document.getElementById("plNote");
   if(locked)
-    note.textContent="This week has not been paid yet, so these are predictions from what you logged. On "
-      + DAYSHORT[dowIndex(paydayOf(k))] + " " + shortDate(paydayOf(k))
+    note.textContent="This "+pWord(k)+" has not been paid yet, so these are predictions from what you logged. On "
+      + DAYSHORT[dowIndex(payOf(k))] + " " + shortDate(payOf(k))
       + " it unlocks by itself and you can check it against the real slip.";
   else if(!plHasAny(k))
     note.textContent="Type the hours off each line of the payslip. Anything you leave blank is taken as agreeing with what I logged, so you only need to fill in what looks off.";
@@ -3095,7 +3477,8 @@ function weeksWithData(){
 function renderHistory(){
   const box=document.getElementById("histList");
   const today=iso(new Date());
-  const keys=weeksWithData().filter(k=>paydayOf(k)<=today && (calc(k).hasData||plHasAny(k)));
+  const keys=[...new Set(weeksWithData().map(perOf))].sort((x,y)=>payOf(y)<payOf(x)?-1:1)
+    .filter(k=>payOf(k)<=today && (pcalc(k).hasData||plHasAny(k)));
   const note=document.getElementById("histNote");
   if(!keys.length){
     box.innerHTML=`<p class="note">No paydays yet. Once a week you have logged is paid, it shows up here.</p>`;
@@ -3104,8 +3487,8 @@ function renderHistory(){
   }
   box.innerHTML="";
   keys.forEach(k=>{
-    const c=calc(k);
-    const paid=paydayOf(k);
+    const c=pcalc(k);
+    const paid=payOf(k);
     let tail, cls="";
     if(plHasAny(k)){
       const t=plTotals(k,c), gh=t.slipH-t.expH, gp=t.slipPay-t.expPay;
@@ -3164,7 +3547,7 @@ function csv(){
       const r=load().days[ds]||{}, mins=duration(r.start,r.end);
       const isBH=BH.has(ds)&&i<5&&mins===0;
       const dv=driveInfo(ds,r), ri=restInfo(ds), rb=ri?ri.gap:null;
-      rows.push([ds,DAYNAME[i],k,paydayOf(k),r.start||"",r.end||"",dec(mins).toFixed(2),
+      rows.push([ds,DAYNAME[i],k,payOf(perOf(k)),r.start||"",r.end||"",dec(mins).toFixed(2),
         isBH?"yes":"",(r.hol&&mins===0&&i<5&&!isBH&&!r.sick)?"yes":"",(r.sick&&mins===0&&i<5&&!isBH)?"yes":"",r.night?"yes":"",
         expPence(r)?n2(expPence(r)/100):"",
         dv.mins?dec(dv.mins).toFixed(2):"",dv.assumed?"assumed":"",
@@ -3187,15 +3570,15 @@ function csv(){
    uses, so anything he has written off is already gone from it and
    anything a later slip covered never appears. */
 function outstanding(){
-  const k=addDays(lastPaidWeek(),7);          /* the state after every slip so far */
+  const k=pnext(lastPaidPer());          /* the state after every slip so far */
   const st=plCarryIn(k);
   const out=[];
-  PL_LINES.forEach(([key,label0,unit,rateKey])=>{
+  plLines(k).forEach(([key,label0,unit,rateKey])=>{
     const o=st[key];
     if(!o || !(o.owed>0)) return;
-    const label=plLabel(key,label0,o.from);
-    const cash = unit==="h" ? o.owed*S(rateKey,o.from)
-               : unit==="n" ? o.owed*nightRate(o.from)
+    const label=plLabel(key,label0,pAt(o.from));
+    const cash = unit==="h" ? o.owed*S(rateKey,pAt(o.from))
+               : unit==="n" ? o.owed*nightRate(pAt(o.from))
                : o.owed;
     out.push({key, label, unit, rateKey, owed:o.owed, from:o.from, cash});
   });
@@ -3210,11 +3593,11 @@ function disputeCsv(){
       o.label,
       o.unit==="h" ? n2(o.owed) : o.unit==="\u00a3" ? n2(o.owed) : String(o.owed),
       o.unit==="h" ? "hours" : o.unit==="n" ? "nights" : "\u00a3",
-      o.unit==="h" ? n2(S(o.rateKey,o.from)) : o.unit==="n" ? n2(nightRate(o.from)) : "",
+      o.unit==="h" ? n2(S(o.rateKey,pAt(o.from))) : o.unit==="n" ? n2(nightRate(pAt(o.from))) : "",
       n2(o.cash),
-      o.from ? prettyDate(o.from) : "",
-      o.from || "",
-      o.from ? paydayOf(o.from) : ""
+      o.from ? prettyDate(perFirst(o.from)) : "",
+      o.from ? perFirst(o.from) : "",
+      o.from ? payOf(o.from) : ""
     ]);
   });
   rows.push(["","","","","","","",""]);
@@ -3360,7 +3743,7 @@ const SETUP_RATES=[
   ["otRate","Standard overtime","weekday hours above the threshold"],
   ["satRate","Saturday rate","always overtime, outside the threshold"],
   ["satMin","Saturday minimum","hours paid even if you work less"],
-  ["sunRate","Sunday rate","not confirmed — a guess until you see one"],
+  ["sunRate","Sunday rate","also paid for a bank holiday you work"],
   ["sunMin","Sunday minimum","also used for a bank holiday you work"],
   ["nightOut","Night out","one tick a night"],
   ["meal","Meal allowance","goes with every night out — set it to 0 if your night out is one payment with no voucher"],
@@ -3632,6 +4015,11 @@ function ytdField(){
 
 function renderSetup(){
   const d=load();
+  { const el=document.getElementById("setFreq"), st=d.settings;
+    if(el) el.textContent = st.payFreq==="monthly"
+      ? "Paid monthly. The pay period ends on the "+(Number(st.payCut)>=31?"last day of the month":suOrd(Number(st.payCut)))+
+        " and is paid on the "+suOrd(Number(st.payDate))+". To change it, use the button at the bottom."
+      : "Paid weekly. To change to monthly, use the button at the bottom."; }
   const build=(list,el)=>{
     el.innerHTML="";
     list.forEach(([k,name,hint,kind])=>{
@@ -3706,10 +4094,13 @@ function calMonthStats(mk){
   for(let ds=first; ds<nextFirst; ds=addDays(ds,1)) mins+=calDay(ds).mins;
   /* take-home that lands in this month: every week whose payday falls in it */
   let net=0, n=0;
-  for(let k=addDays(mondayOf(first),-14); k<nextFirst; k=addDays(k,7)){
-    if(k>lim) break;
-    if(monthKey(paydayOf(k))!==mk) continue;
-    const c=calc(k);
+  const seen=new Set();
+  for(let w=addDays(mondayOf(first),-56); w<nextFirst; w=addDays(w,7)){
+    if(w>lim) break;
+    const k=perOf(w);
+    if(seen.has(k)) continue; seen.add(k);
+    if(monthKey(payOf(k))!==mk) continue;
+    const c=pcalc(k);
     if(c.hasData){ net+=c.net; n++; }
   }
   return {mins, net, n};
@@ -3883,7 +4274,7 @@ function buildMapSetup(){
    a short list of doors. each one opens the same fields the old folds held,
    one screen at a time; nothing about what they store has changed. */
 const SET_GROUPS=[
-  ["Your job",[["rates","Pay rates",()=>"\u00a3"+n2(SNOW("basicRate"))+" basic"]]],
+  ["Your job",[["rates","Pay rates",()=>"\u00a3"+n2(SNOW("basicRate"))+" basic \u00b7 "+(load().settings.payFreq==="monthly"?"monthly":"weekly")]]],
   ["Tax & deductions",[["ded","Tax code, pension, NI",()=>SS("taxCode")]]],
   ["Calendar",[["bh","Bank holidays",()=>{ const ys=BH.years(); return ys.length?"to end of "+ys[ys.length-1]:"none loaded"; }]]],
   ["Extras",[["map","Route map",()=>haReady()?"on":"off"]]],
@@ -4055,7 +4446,7 @@ async function rcView(ds,n,edit){
   if(rcUrl){ try{ URL.revokeObjectURL(rcUrl); }catch(e){} }
   rcUrl=URL.createObjectURL(rec.blob);
   document.getElementById("rcImg").src=rcUrl;
-  const pay=paydayOf(mondayOf(ds)), today=iso(new Date());
+  const pay=payOf(perOf(mondayOf(ds))), today=iso(new Date());
   document.getElementById("rcTitle").textContent=DAYSHORT[dowIndex(ds)]+" "+shortDate(ds)+" \u00b7 "+(expLabel(x)||"expense")+" \u00b7 "+penceText(x.a);
   document.getElementById("rcSub").textContent=(pay<=today?"Due on the ":"To be paid on the ")+DAYSHORT[dowIndex(pay)]+" "+shortDate(pay)+" payday.";
   document.getElementById("rcRetake").classList.toggle("hidden",!edit);
@@ -4119,14 +4510,14 @@ function goRates(){
 /* how far ahead he can go: a year, so booked time off can go in early */
 function navLimit(){ return addDays(mondayOf(iso(new Date())),7*53-1); }
 function navAtEnd(){
-  if(tab==="pay") return plCur()>=addDays(lastPaidWeek(),7);
+  if(tab==="pay") return payOf(plCur())>=payOf(pnext(lastPaidPer()));
   if(tab==="history"||tab==="more") return false;
   if(tab==="cal") return calCur()>=monthKey(navLimit());
   return (tab==="day" ? addDays(curDay,1) : addDays(cur(),7)) > navLimit();
 }
 function stepWeekNav(dir){
   if(dir>0 && navAtEnd()) return;
-  if(tab==="pay"){ plWeek=addDays(plCur(),7*dir); }
+  if(tab==="pay"){ plWeek = dir>0 ? pnext(plCur()) : pprev(plCur()); }
   else if(tab==="history"||tab==="more"){ return; }
   else if(tab==="cal"){ calMonth=shiftMonth(calCur(),dir); }
   else { curDay=addDays(curDay,(tab==="day"?1:7)*dir); }
@@ -4136,7 +4527,7 @@ document.getElementById("prev").addEventListener("click",()=>stepWeekNav(-1));
 document.getElementById("next").addEventListener("click",()=>stepWeekNav(1));
 document.getElementById("todayBtn").addEventListener("click",()=>{
   if(tab==="more") return;
-  if(tab==="pay") plWeek=lastPaidWeek();
+  if(tab==="pay") plWeek=lastPaidPer();
   else if(tab==="cal") calMonth=monthKey(iso(new Date()));
   else curDay=iso(new Date());
   render();
@@ -4147,13 +4538,13 @@ document.getElementById("sspIn").addEventListener("change",e=>{
   w.ssp=e.target.value; save(); render();
 });
 document.getElementById("plAll").addEventListener("click",()=>{
-  const k=plCur(), d=load();
-  if(k>=addDays(lastPaidWeek(),7)) return;          /* not paid yet */
-  const c=calc(k), e=plExpected(k,c);
+  const k=plCur();
+  if(payOf(k)>=payOf(pnext(lastPaidPer()))) return;          /* not paid yet */
+  const c=pcalc(k), e=plExpected(k,c);
   const carryIn=plCarryIn(k)||{};
-  const w=d.weeks[k]=d.weeks[k]||{};
+  const w=pslot(k,true);
   w.payslip=w.payslip||{};
-  PL_LINES.forEach(([key,,unit])=>{
+  plLines(k).forEach(([key,,unit])=>{
     if(num(w.payslip[key])!==null) return;          /* typed by hand — leave it */
     const owed=(((w.wo||{})[key]) ? 0 : ((carryIn[key]||{}).owed||0));
     if(unit==="n"){ w.chk=w.chk||{}; w.chk.nights=1; return; }
@@ -4164,14 +4555,14 @@ document.getElementById("plAll").addEventListener("click",()=>{
 });
 
 document.getElementById("plClear").addEventListener("click",()=>{
-  const d=load(), w=d.weeks[plCur()];
+  const w=pslot(plCur());
   if(!w||!w.payslip) return;
-  if(!confirm("Clear the payslip figures for "+shortDate(plCur())+" – "+shortDate(addDays(plCur(),6))+"?")) return;
+  if(!confirm("Clear the payslip figures for "+shortDate(perFirst(plCur()))+" – "+shortDate(addDays(perLast(plCur()),6))+"?")) return;
   delete w.payslip; save(); render();
 });
 
 document.getElementById("expCsv").addEventListener("click",()=>download("hours-"+iso(new Date())+".csv",csv(),"text/csv"));
-document.getElementById("rateChanged").addEventListener("click",rateChangeFlow);
+document.getElementById("rateChanged").addEventListener("click",()=>setupOpen("change"));
 document.getElementById("expDisp").addEventListener("click",()=>{
   if(!outstanding().length){ alert("Nothing is outstanding \u2014 every line has been paid or written off."); return; }
   download("owed-"+iso(new Date())+".csv",disputeCsv(),"text/csv");
@@ -4203,7 +4594,10 @@ document.getElementById("fileIn").addEventListener("change",e=>{
         (fresh?" The other "+fresh+" would be added.":""))) return;
       mem.days=Object.assign(mem.days,incDays);
       mem.weeks=Object.assign(mem.weeks,incWeeks);
-      mem.settings=Object.assign(mem.settings,inc.settings||{});
+      if(inc.months) mem.months=Object.assign(mem.months||{},inc.months);
+      const incS=inc.settings||{};
+      if(!incS.ratesFrozen && Object.keys(incS).length) freezeLegacy(incS);
+      mem.settings=Object.assign(mem.settings,incS);
       save(); render();
       alert("Restored "+keys.length+(keys.length===1?" day":" days")+
         " and "+Object.keys(incWeeks).length+" week"+(Object.keys(incWeeks).length===1?"":"s")+".");
@@ -4298,6 +4692,196 @@ if("serviceWorker" in navigator && location.protocol.startsWith("http")){
     navigator.serviceWorker.register("./sw.js").catch(()=>{});
   });
 }
+
+/* ============ v37: the setup screen ============
+   one guided screen for three jobs: a brand new install, a new job (or a pay
+   rise), and switching between weekly and monthly pay. the boxes it fills are
+   the same ones Settings -> Pay rates shows, which stay editable as ever. */
+let suMode=null, suSnap=null, suYtdTouched=false;
+const suNum = v => { const t=String(v===undefined||v===null?"":v).replace(/[^\d.\-]/g,""); return t===""||isNaN(Number(t))?null:Number(t); };
+const suOrd = n => n+((n%100>=11&&n%100<=13)?"th":["th","st","nd","rd"][n%10]||"th");
+const suVal = k => { const v=load().settings[k]; return v===undefined||v===null?"":String(v); };
+
+/* what has been earned and taxed so far this tax year, as at the last period
+   on the old pay. it is what a P45 would say, worked out from what is logged. */
+function ytdSnapshot(k){
+  const pay=payOf(k), st=taxYearStart(pay);
+  let taxable=0, yrs=0, full=false;
+  const mh=modeHandFor(k);
+  if(isMonthlyKey(k)){
+    const b=cumBasisM(k); if(b){ taxable=b.cum; yrs=b.n/12; }
+    full = mh ? !!mh.full : !!(SS("ytdFrom") && SS("ytdFrom")<pay && taxYearStart(SS("ytdFrom"))===st);
+  }else{
+    const b=cumBasis(k); if(b){ taxable=b.cum; yrs=b.weeks/52; }
+    full = mh ? !!mh.full : !!(SS("ytdFrom") && !ytdStale(k));
+  }
+  let tax=0;
+  for(let x=k, i=0; i<60; i++, x=pprev(x)){
+    if(taxYearStart(payOf(x))!==st) break;
+    const c=pcalc(x); if(c.hasData) tax+=c.tax;
+  }
+  return {taxable:r2(taxable), tax:r2(tax), yrs, full};
+}
+
+function setupOpen(mode){
+  suMode=mode; suYtdTouched=false;
+  const s=load().settings, el=document.getElementById("setup"), box=el.querySelector(".box");
+  const fr = s.payFreq==="monthly" ? "monthly" : "weekly";
+  const otm = (s.otMode==="day") ? "day" : "week";
+  const today=iso(new Date());
+  let h="";
+  if(mode==="new"){
+    h+=`<h3>Set up your pay</h3>
+      <p class="lead">A minute now, and the Payday tab works from day one. Everything here can be changed later in Settings.</p>`;
+  }else{
+    h+=`<h3>New job, or new pay</h3>
+      <p class="lead">Your old figures stay on every week up to the date below, so anything you have already been paid for stays exactly as it was.</p>
+      <div class="field"><label>Last day on the old pay<span class="hint">the new figures start the Monday after</span></label>
+        <input id="suTo" type="date" value="${addDays(mondayOf(today),-1)}"></div>`;
+  }
+  h+=`<h4>How are you paid?</h4>
+    <div class="pair">
+      <div class="pf"><button class="chip${fr==="weekly"?" on":""}" data-fr="weekly">Weekly</button></div>
+      <div class="pf"><button class="chip${fr==="monthly"?" on":""}" data-fr="monthly">Monthly</button></div>
+    </div>
+    <div id="suMon" class="${fr==="monthly"?"":"hidden"}">
+      <div class="field"><label>Pay period ends on day<span class="hint">the last day your pay covers. 31 means the end of every month.</span></label>
+        <input id="suCut" inputmode="numeric" placeholder="31" value="${esc(suVal("payCut"))}"></div>
+      <div class="field"><label>Paid on day<span class="hint">a weekend or bank holiday is paid the working day before</span></label>
+        <input id="suPay" inputmode="numeric" placeholder="15" value="${esc(suVal("payDate"))}"></div>
+      <p class="note" id="suEx"></p>
+    </div>
+    <h4>Your rates</h4>
+    <div class="field"><label>Basic hourly rate</label><input id="suBasic" inputmode="decimal" placeholder="0.00" value="${esc(mode==="change"?suVal("basicRate"):"")}"></div>
+    <div class="pair">
+      <div class="pf"><button class="chip${otm==="week"?" on":""}" data-otm="week">Overtime by the week</button></div>
+      <div class="pf"><button class="chip${otm==="day"?" on":""}" data-otm="day">Overtime by the day</button></div>
+    </div>
+    <div class="field"><label id="suThrL">Overtime starts after</label>
+      <input id="suThr" inputmode="decimal" placeholder="${otm==="day"?"8":"40"}" value="${esc(mode==="change"?suVal(otm==="day"?"otDayHours":"basicCap"):"")}"><span class="unit">hours</span></div>
+    <div class="field"><label>Overtime rate<span class="hint">an hour</span></label><input id="suOt" inputmode="decimal" placeholder="0.00" value="${esc(mode==="change"?suVal("otRate"):"")}"></div>
+    <div class="field"><label>Night out<span class="hint">leave blank if you don't get one</span></label><input id="suNight" inputmode="decimal" placeholder="0.00" value="${esc(mode==="change"?suVal("nightOut"):"")}"></div>
+    <p class="note">Saturday and Sunday rates, allowances and sick pay are in Settings &rarr; Pay rates.</p>`;
+  if(mode==="new"){
+    h+=`<h4>Worked since 6 April?</h4>
+      <p class="note">If you have been paid by anyone this tax year, take these off your P45 or your latest payslip, so the tax carries on from there. Leave them blank if not.</p>
+      <div class="field"><label>Pay so far this tax year<span class="hint">"taxable pay to date"</span></label><input id="suYP" inputmode="decimal" placeholder="0.00"></div>
+      <div class="field"><label>Tax paid so far</label><input id="suYT" inputmode="decimal" placeholder="0.00"></div>
+      <div class="field"><label>Date of that payslip</label><input id="suYD" type="date" value="${today}"></div>`;
+  }else{
+    h+=`<h4>So far this tax year</h4>
+      <p class="note" id="suYN"></p>
+      <div class="field"><label>Pay so far this tax year</label><input id="suYP" inputmode="decimal"></div>
+      <div class="field"><label>Tax paid so far</label><input id="suYT" inputmode="decimal"></div>`;
+  }
+  h+=`<button id="suSave" class="go">Save</button>
+      <button id="suLater" class="later">${mode==="new"?"Not now":"Cancel"}</button>`;
+  box.innerHTML=h;
+  el.classList.remove("hidden");
+  box.scrollTop=0;
+
+  const q=sel=>box.querySelector(sel);
+  box.querySelectorAll("[data-fr]").forEach(b=>b.addEventListener("click",()=>{
+    box.querySelectorAll("[data-fr]").forEach(x=>x.classList.toggle("on",x===b));
+    q("#suMon").classList.toggle("hidden",b.dataset.fr!=="monthly"); suExample();
+  }));
+  box.querySelectorAll("[data-otm]").forEach(b=>b.addEventListener("click",()=>{
+    box.querySelectorAll("[data-otm]").forEach(x=>x.classList.toggle("on",x===b));
+    const day=b.dataset.otm==="day";
+    q("#suThrL").textContent = day ? "Overtime starts after, in a day" : "Overtime starts after, in a week";
+    q("#suThr").placeholder = day ? "8" : "40";
+    if(mode==="change") q("#suThr").value = suVal(day?"otDayHours":"basicCap");
+  }));
+  q("#suThrL").textContent = otm==="day" ? "Overtime starts after, in a day" : "Overtime starts after, in a week";
+  ["#suCut","#suPay"].forEach(id=>q(id).addEventListener("input",suExample));
+  suExample();
+  if(mode==="change"){
+    const fill=()=>{
+      const to=q("#suTo").value;
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(to)) return;
+      const k=perOf(mondayOf(to));
+      suSnap=ytdSnapshot(k);
+      q("#suYN").textContent="Worked out from what you have logged, up to the "+perLabel(k).replace(/^paid /,"")+" payday. If your last payslip says different, put that in.";
+      if(!suYtdTouched){ q("#suYP").value=n2(suSnap.taxable); q("#suYT").value=n2(suSnap.tax); }
+    };
+    q("#suTo").addEventListener("change",fill);
+    ["#suYP","#suYT"].forEach(id=>q(id).addEventListener("input",()=>{ suYtdTouched=true; }));
+    fill();
+  }
+  q("#suSave").addEventListener("click",setupSave);
+  q("#suLater").addEventListener("click",()=>{
+    if(mode==="new"){ const d=load(); d.settings.setupDone=1; save(); }
+    setupClose();
+  });
+}
+function setupClose(){ document.getElementById("setup").classList.add("hidden"); suMode=null; render(); }
+function suExample(){
+  const box=document.getElementById("setup"), ex=box.querySelector("#suEx");
+  if(!ex) return;
+  const cut=suNum(box.querySelector("#suCut").value), pd=suNum(box.querySelector("#suPay").value);
+  if(!(cut>=1&&cut<=31) || !(pd>=1&&pd<=31)){ ex.textContent="Fill in both days and an example shows here."; return; }
+  const end=cutAfter(iso(new Date()),cut), pay=monthlyPayday(end,pd);
+  ex.textContent="So the period ending "+DAYSHORT[dowIndex(end)]+" "+shortDate(end)+" is paid "+DAYSHORT[dowIndex(pay)]+" "+shortDate(pay)+
+    ". A week belongs to the month its Sunday falls in.";
+}
+function setupSave(){
+  const box=document.getElementById("setup"), q=sel=>box.querySelector(sel);
+  const d=load(), s=d.settings;
+  const fr=box.querySelector("[data-fr].on").dataset.fr;
+  const otm=box.querySelector("[data-otm].on").dataset.otm;
+  const cut=suNum(q("#suCut").value), pd=suNum(q("#suPay").value);
+  if(fr==="monthly" && (!(cut>=1&&cut<=31&&cut%1===0) || !(pd>=1&&pd<=31&&pd%1===0))){
+    alert("For monthly pay, put in the day your pay period ends and the day you are paid — both between 1 and 31."); return;
+  }
+  const basic=suNum(q("#suBasic").value), thr=suNum(q("#suThr").value), ot=suNum(q("#suOt").value), night=suNum(q("#suNight").value);
+  const writeRates=()=>{
+    if(basic!==null) s.basicRate=basic;
+    if(ot!==null) s.otRate=ot;
+    s.otMode=otm;
+    if(thr!==null){ if(otm==="day") s.otDayHours=thr; else s.basicCap=thr; }
+    if(night!==null) s.nightOut=night;
+    s.payFreq=fr; s.payCut=fr==="monthly"?cut:""; s.payDate=fr==="monthly"?pd:"";
+  };
+  if(suMode==="new"){
+    writeRates();
+    const yp=suNum(q("#suYP").value), yt=suNum(q("#suYT").value), yd=q("#suYD").value;
+    if(yp!==null){
+      s.ytdFrom=/^\d{4}-\d{2}-\d{2}$/.test(yd)?yd:iso(new Date());
+      s.ytdTaxable=yp; s.ytdTax=yt===null?0:yt;
+    }
+    s.setupDone=1; save(); setupClose(); return;
+  }
+  /* ---- a change ---- */
+  let to=q("#suTo").value;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(to)){ alert("Pick the last day on your old pay."); return; }
+  to=addDays(mondayOf(to),6);           /* a week is priced whole, so it ends on a Sunday */
+  if(rateHist().some(e=>e.to>=to) || freqHist().some(e=>e.to>=to)){
+    alert("You already have a change on or after "+shortDate(to)+". Pick a later date."); return;
+  }
+  const lastOld=perOf(mondayOf(to));
+  const snap=ytdSnapshot(lastOld);
+  const yp=suNum(q("#suYP").value), yt=suNum(q("#suYT").value);
+  const edited = suYtdTouched && ((yp!==null && Math.abs(yp-snap.taxable)>=0.005) || (yt!==null && Math.abs(yt-snap.tax)>=0.005));
+  const oldF={freq:s.payFreq==="monthly"?"monthly":"weekly", payDate:s.payDate||"", payCut:s.payCut||""};
+  const newF={freq:fr, payDate:fr==="monthly"?pd:"", payCut:fr==="monthly"?cut:""};
+  const fChanged = oldF.freq!==newF.freq || String(oldF.payDate)!==String(newF.payDate) || String(oldF.payCut)!==String(newF.payCut);
+  /* the old rates, kept for every week up to `to` */
+  const rates={}; RATE_KEYS.forEach(k=>{ rates[k]=rawS(k,null); });
+  s.rateHist=rateHist().concat([{to,rates}]).sort((a,b)=>a.to<b.to?-1:1);
+  if(fChanged) s.freqHist=freqHist().concat([Object.assign({to},oldF)]).sort((a,b)=>a.to<b.to?-1:1);
+  /* switching weekly<->monthly is a new payroll as far as tax goes: the year
+     so far is handed over, the way a P45 would. typed-over figures do the same. */
+  if(oldF.freq!==newF.freq || edited){
+    s.modeHand={ from:payOf(lastOld), start:addDays(to,1),
+      taxable: edited&&yp!==null ? yp : snap.taxable,
+      tax:     edited&&yt!==null ? yt : snap.tax,
+      yrs:snap.yrs, full: edited || snap.full };
+  }
+  writeRates();
+  save(); setupClose();
+  if(typeof plWeek!=="undefined") plWeek=null;
+}
+
 /* ---- the first-run notice ----
    shown on a brand new install, and again after an update that changes what it
    says. NOT tied to BUILD: bumping this on every version would nag people who
@@ -4314,12 +4898,20 @@ function introCheck(){
     const dd=load();
     dd.settings.introRev=INTRO_REV; save();
     el.classList.add("hidden");
+    setupCheck();
   });
+}
+function setupCheck(){
+  const d=load();
+  if(d.settings.setupDone) return;
+  if(!document.getElementById("intro").classList.contains("hidden")) return;
+  setupOpen("new");
 }
 
 bhAutoCheck();
 taxYearCheck();
 introCheck();
+setupCheck();
 if(navigator.storage && navigator.storage.persist){
   navigator.storage.persisted().then(ok=>{ if(!ok) navigator.storage.persist().catch(()=>{}); }).catch(()=>{});
 }
