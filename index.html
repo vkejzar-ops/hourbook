@@ -297,9 +297,6 @@ nav button.on .g{opacity:1}
 .rbill .t{display:block;font-size:17px;font-weight:600;line-height:1.25}
 .rbill .t b{color:var(--amber)}
 .rbill .s{display:block;font-size:13.5px;line-height:1.35;margin-top:4px}
-.rbill.late{background:#F7DEDA;border-color:var(--red)}
-.rbill.late .t b{color:var(--red)}
-.rbill + .rbill{margin-top:8px}
 .hpill .hr{display:flex;align-items:flex-start}
 .hpill .hr + .hr{margin-top:9px;padding-top:9px;border-top:1px solid var(--rule)}
 .hpill .hc{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center}
@@ -689,27 +686,23 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
 </div>
 
 <div id="intro" class="hidden"><div class="box">
-  <h3>Every figure here is an estimate</h3>
-  <p class="lead">Nothing in this app is connected to payroll or to HMRC. It
-    works entirely off what you type into it, so it can only be as right as
-    what it has been told.</p>
-  <p>Four things make it closer, in the order they are worth doing:</p>
+  <h3>How Hourbook works</h3>
   <ul>
-    <li><b>Settings &rarr; Tax &amp; deductions &rarr; Pay so far this tax year.</b> The biggest one by far.
-      Take the year-to-date boxes off your latest payslip, or off a P45.
-      Without it the app guesses your tax from the weeks it can see, and early
-      on that is not many.</li>
-    <li><b>Settings &rarr; Tax &amp; deductions &rarr; your tax code</b>, off a real payslip. It assumes the
-      standard code until you tell it otherwise, and it cannot check the one
-      you type.</li>
-    <li><b>Settings &rarr; pay rates, student loan, Medicash, pension.</b> They are
-      all editable because not everyone is on the same ones.</li>
-    <li><b>The Payday tab</b>, once a slip actually lands. Put the real
-      numbers in and it will tell you where it differs.</li>
+    <li><b>Today</b> &mdash; type when you started and finished, and the driving
+      and other-work figures off your tacho. That is all it needs each day.</li>
+    <li><b>The hours bar on Today</b> &mdash; tap it for your drivers' hours:
+      driving limits, rests used, and any weekly rest you owe back.</li>
+    <li><b>Calendar</b> &mdash; every day at a glance. Tap a day to open it, or a
+      week total to see that week's pay.</li>
+    <li><b>Payday</b> &mdash; when your slip lands, put the real figures in and it
+      shows where they differ.</li>
+    <li><b>Settings</b> &mdash; your pay, tax, and backups. Download a backup
+      now and then &mdash; everything lives on this phone only.</li>
   </ul>
-  <p class="warn">This is not payroll and it is not tax advice. Your payslip is
-    the real answer. If the two disagree, it is worth asking payroll &mdash; but
-    check here first, because the app may simply not know something yet.</p>
+  <p class="lead"><b>Only want to track your hours?</b> You do not have to put any
+    pay rates in. Skip the next screen and the hours and rest side works on its own.</p>
+  <p class="warn">Any pay and tax figures are estimates from what you type in &mdash;
+    not payroll and not tax advice. Your payslip is the real answer.</p>
   <button id="introOk">Got it</button>
 </div></div>
 
@@ -986,7 +979,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v37";
+const BUILD="v38";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -1303,30 +1296,6 @@ function weeklyPayback(k){
 }
 
 
-/* v37: every reduced weekly rest still owed back as at day ds — not yet
-   paid, and either still inside its deadline or gone past it within the last
-   four weeks (overdue is shown too: hiding it would be worse). newest last. */
-function restOwed(ds){
-  const out=[], wk=mondayOf(ds);
-  for(let i=8;i>=1;i--){
-    const k=addDays(wk,-7*i);
-    if(addDays(k,6)>=ds) continue;            /* the week must be finished */
-    const pb=weeklyPayback(k);
-    if(!pb || pb.paid) continue;
-    if(pb.by<addDays(ds,-28)) continue;
-    out.push({k, owed:pb.owed, by:pb.by, late:pb.by<ds});
-  }
-  return out;
-}
-function restOwedBill(ds){
-  const o=restOwed(ds);
-  if(!o.length) return "";
-  return o.map(x=>`<button class="rbill${x.late?" late":""}" data-rbill="1">
-    <span class="t">${x.late?"Overdue: ":"You owe "}<b>${hm(x.owed)}</b> weekly rest</span>
-    <span class="s">${x.late?"was due by":"take it by"} <b>${DAYSHORT[dowIndex(x.by)]} ${shortDate(x.by)}</b> — in one block, added to a weekly rest (week of ${shortDate(x.k)})</span>
-  </button>`).join("");
-}
-
 /* how many reduced daily rests have been used since the last weekly rest,
    counting backwards from and including the given day */
 
@@ -1393,6 +1362,23 @@ function restFlags(ds){
 }
 
 /* the longest break touching this week, worked out from the clock */
+/* v38: every reduced weekly rest from an EARLIER week whose payback is still
+   unpaid and still inside its deadline, as at the Sunday of the week being
+   viewed. Independent of this week's own rest — a full rest this week does not
+   clear an older debt, and an older debt does not make this week reduced. */
+function owedCarry(upto){
+  const out=[];
+  for(let i=1;i<=5;i++){                 // look back up to 5 weeks
+    const wk=addDays(mondayOf(upto),-7*i);
+    const pb=weeklyPayback(wk);
+    if(pb && !pb.paid && pb.by>=upto){    // still owed, not yet past its deadline
+      out.push({wk, owed:pb.owed, by:pb.by, late:false});
+    }else if(pb && !pb.paid && pb.by<upto){
+      out.push({wk, owed:pb.owed, by:pb.by, late:true});
+    }
+  }
+  return out;
+}
 function weeklyRestOf(k){
   let best=0;
   for(let i=0;i<8;i++){                 // 8 covers the gap after Sunday's shift
@@ -2669,7 +2655,6 @@ function renderDay(c){
     `<button class="rbill" data-nudge="1"><span class="t">No pay rates yet</span><span class="s">Tap to set up your pay, or the money figures stay at nothing.</span></button>`;
   box.innerHTML=`
     ${nudge}
-    ${restOwedBill(curDay)}
     ${pill}
     ${r.sick&&!worked?`<p class="note" style="margin-top:14px">Off sick. ${sickRate?"It pays £"+n2(sickRate)+" for the day.":"No daily rate is set, so nothing is predicted — type what the slip says on the week view."}${attAmt>0?" It does <b>not</b> keep your attendance allowance.":""}</p>`:""}
     ${isBH?`<p class="note" style="margin-top:14px">Bank holiday. Leave it blank and it pays ${S("bhHours",curDay)} hours at the basic rate. Put times in and it pays at the Sunday rate instead, minimum ${S("sunMin",curDay)} hours.${curDay>iso(new Date())&&worked===0?` <b>Not in the week total yet</b> — it counts from ${shortDate(curDay)}.`:""}</p>`:""}
@@ -2834,7 +2819,6 @@ function renderDay(c){
   box.querySelector("#toWeek").addEventListener("click",()=>switchTab("week"));
   box.querySelector("#hPill").addEventListener("click",()=>switchTab("hours"));
   box.querySelectorAll("[data-nudge]").forEach(b=>b.addEventListener("click",()=>setupOpen("new")));
-  box.querySelectorAll("[data-rbill]").forEach(b=>b.addEventListener("click",()=>switchTab("hours")));
 }
 
 /* ============ week view ============ */
@@ -2969,7 +2953,11 @@ function renderHours(c){
   document.getElementById("dhWeek").innerHTML=dh.join("");
 
   const rest=[];
-  { const t=iso(new Date()); const b=restOwedBill(cur()<=t && t<=addDays(cur(),6) ? t : addDays(cur(),6)); if(b) rest.push(b); }
+  { const sun=addDays(cur(),6); owedCarry(sun).forEach(x=>{
+      rest.push(`<div class="stat">
+        <div class="top"><span class="name">Owed from w/c ${shortDate(x.wk)}</span><span class="val ${x.late?"over":"warn"}">${hm(x.owed)} owed</span></div>
+        <div class="note">${x.late?"Was due by "+shortDate(x.by)+" — overdue.":"Weekly rest still to pay back, by "+shortDate(x.by)+", in one block."}</div></div>`);
+    }); }
   const redUsed=reducedSinceWeekly(addDays(cur(),6));
   rest.push(stat("Reduced daily rests",redUsed+" / 3 used",
     (3-redUsed)>0?(3-redUsed)+" left before your next weekly rest":"none left — 11 hours needed now",redUsed/3));
@@ -2977,19 +2965,22 @@ function renderHours(c){
 
   const wrMins=weeklyRestOf(cur()), pwrMins=weeklyRestOf(addDays(cur(),-7));
   const isRed = m => m>=24*60 && m<45*60;
-  let wrVal, wrCls, wrNote;
+  let wrVal, wrCls, wrNote, wrOwe="";
   if(wrMins>=45*60){
     wrVal=hm(wrMins); wrCls="ok";
     wrNote="A full weekly rest, worked out from your finish and start times.";
   }else if(wrMins>=24*60){
     wrVal=hm(wrMins); wrCls=isRed(pwrMins)?"over":"warn";
     const pb=weeklyPayback(cur());
-    wrNote=isRed(pwrMins)
-      ? "Reduced two weeks running — that is not allowed. Check it against your tacho."
-      : pb && pb.paid
-        ? hm(pb.owed)+" was owed back. Paid — you took "+hm(pb.block)+" in one block from "+shortDate(pb.on)+", which covers it."
-        : hm(45*60-wrMins)+" owed back, in one block attached to a rest of 9 hours or more, by the end of "+shortDate(addDays(cur(),27))+". It clears itself once your start and finish times show a long enough break.";
-    if(pb && pb.paid) wrCls="ok";
+    if(isRed(pwrMins)){
+      wrNote="Reduced two weeks running — that is not allowed. Check it against your tacho.";
+    }else if(pb && pb.paid){
+      wrCls="ok";
+      wrNote=hm(pb.owed)+" was owed — paid back by "+hm(pb.block)+" from "+shortDate(pb.on)+".";
+    }else{
+      wrVal=hm(45*60-wrMins)+" owed";
+      wrNote=hm(wrMins)+" taken. Pay back in one block, by "+shortDate(addDays(cur(),27))+".";
+    }
   }else{
     wrVal=wrMins?hm(wrMins):"—"; wrCls=wrMins?"warn":"";
     wrNote=wrMins
@@ -2997,7 +2988,7 @@ function renderHours(c){
       : "Fills itself in once there are enough start and finish times to find a break.";
   }
   rest.push(`<div class="stat">
-    <div class="top"><span class="name">Weekly rest taken</span><span class="val ${wrCls}">${wrVal}</span></div>
+    <div class="top"><span class="name">Weekly rest taken</span><span class="val ${wrCls}">${wrVal}${wrOwe}</span></div>
     <div class="note">${wrNote}</div></div>`);
   document.getElementById("dhRest").innerHTML=rest.join("");
 
