@@ -663,6 +663,28 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
 #intro .warn{font-size:13px;line-height:1.5;color:var(--amber);margin:0 0 16px}
 #intro button{width:100%;padding:13px;border:0;border-radius:10px;
   background:var(--amber);color:#fff;font-size:15.5px;font-weight:600}
+
+/* ---- guided tour (v1.0) ---- */
+.tour-dim{position:fixed;inset:0;z-index:60;pointer-events:auto}
+.tour-dim .hole{position:absolute;border-radius:12px;box-shadow:0 0 0 9999px rgba(20,22,26,.72);
+  transition:all .22s ease;pointer-events:none}
+.tour-dim .ring{position:absolute;border:2px solid var(--amber);border-radius:13px;
+  transition:all .22s ease;pointer-events:none}
+.tour-card{position:fixed;z-index:61;max-width:300px;background:var(--card,#fff);
+  border:1px solid var(--rule);border-radius:14px;padding:14px 15px;
+  box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.tour-card .tt{font-size:15.5px;line-height:1.35;margin:0 0 11px}
+.tour-card .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tour-card .step{font-size:12.5px;color:var(--dim)}
+.tour-card .btns{display:flex;gap:8px}
+.tour-card button{height:34px;padding:0 14px;border-radius:9px;font-size:14px;font-weight:600;
+  border:1px solid var(--rule);background:var(--ground);color:var(--text)}
+.tour-card button.go{background:var(--amber);border-color:var(--amber);color:#fff}
+.tour-card .skip{background:none;border:none;color:var(--dim);font-weight:500;padding:0}
+.tourlink{display:block;width:100%;margin:14px 0 2px;padding:10px;text-align:center;
+  background:none;border:1px dashed var(--rule);border-radius:10px;color:var(--dim);
+  font-size:13.5px;font-weight:500}
+
 </style>
 </head>
 <body>
@@ -979,7 +1001,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v38";
+const BUILD="v1.0";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -1039,6 +1061,7 @@ function save(){
    these are the ones that change when the job changes. tax, NI, pension and
    student loan are deliberately NOT here: they are statutory, they already
    move with the tax year, and the real figures come off the slip anyway. */
+const STR_ERA_KEYS=["taxCode"];
 const RATE_KEYS=["basicRate","basicCap","otRate","satRate","satMin","sunRate","sunMin",
                  "nightOut","meal","attendance","bhHours","holHours","sickRate",
                  "otMode","otDayHours"];
@@ -1072,6 +1095,16 @@ function rawS(k,ds){
   return (v===undefined||v===null||v==="") ? DEFAULTS[k] : v;
 }
 const S = (k,ds) => Number(rawS(k,ds));
+function rawSS(k,ds){
+  if(STR_ERA_KEYS.indexOf(k)>=0 && ds){
+    const r=rateSetFor(ds);
+    if(r){ const v=r[k]; if(!(v===undefined||v===null||v==="")) return String(v); }
+  }
+  const v=load().settings[k];
+  return (v===undefined||v===null||v==="") ? DEFAULTS[k] : String(v);
+}
+const SSD = (k,ds) => rawSS(k,ds);
+
 /* a deliberate read of the CURRENT rate with no week attached — the settings
    editor, which is showing you the live figures by definition */
 const SNOW = k => { const was=STRICT_RATES; STRICT_RATES=false;
@@ -1176,15 +1209,15 @@ function parseTaxCode(raw){
 }
 
 /* what a code gives you each week, falling back to the default if it is junk */
-function weeklyFree(){
-  const p=parseTaxCode(SS("taxCode")) || parseTaxCode(DEFAULTS.taxCode);
+function weeklyFree(ds){
+  const p=parseTaxCode(SSD("taxCode",ds)) || parseTaxCode(DEFAULTS.taxCode);
   return p.free;
 }
 
 /* tax on one week in isolation — no year-to-date, every week treated the same.
    this is the fallback, and what runs while the cumulative sum is being built. */
-function taxWeekly(taxable){
-  const p=parseTaxCode(SS("taxCode")) || parseTaxCode(DEFAULTS.taxCode);
+function taxWeekly(taxable, ds){
+  const p=parseTaxCode(SSD("taxCode",ds)) || parseTaxCode(DEFAULTS.taxCode);
   if(p.kind==="none") return 0;
   if(p.kind==="flat") return r2(Math.max(0,taxable)*p.rate/100);
   return r2(bandTax(Math.max(0, taxable - p.free)));
@@ -1446,7 +1479,7 @@ function calc(monKey, skip){
   const dates=[]; for(let i=0;i<7;i++) dates.push(addDays(monKey,i));
   const wk=d.weeks[monKey]||{};
   let weekdayMins=0, satMins=0, sunMins=0, bhWorkedPaid=0, bhWorkedMins=0;
-  let dayOtMins=0;        /* daily-overtime mode: hours past the daily figure */
+  let dayOtMins=0; let dayBasicMins=0;        /* daily-overtime mode: hours past the daily figure */
   let nights=0, bhDays=0, holDays=0, sickDays=0, unpDays=0, workedMins=0, driveMins=0, extDrive=0;
   let daysWorked=0;   /* any day with worked time on it — drives the rounding grace */
   let dedMins=0;
@@ -1508,9 +1541,22 @@ function calc(monKey, skip){
     else if(onHol){ if(ds>todayIso) holPending++; else holDays++; }
     else if(i<5){
       weekdayMins+=pmins;
-      /* daily overtime is worked out a day at a time and rounded a day at a
-         time — the days do not pool, so neither does the rounding. */
-      if(dayOt) dayOtMins+=q(Math.max(0,pmins-S("otDayHours",AT)*60));
+      /* daily overtime is rounded a day at a time; the days do not pool.
+         basic is capped at the daily threshold (a flat 8h on any day that
+         reaches it, actual hours on a shorter day). the quarter-hour
+         rounding only ever moves overtime, never basic. */
+      if(dayOt){
+        const thr=S("otDayHours",AT)*60;
+        if(pmins>thr){
+          /* over the threshold: basic is a flat 8h, only overtime rounds */
+          dayOtMins+=q(pmins-thr);
+          dayBasicMins+=thr;
+        } else {
+          /* under the threshold: no overtime, so the day's hours (the basic)
+             are what gets quarter-hour rounded */
+          dayBasicMins+=q(pmins);
+        }
+      }
     }
     else if(i===5) satMins+=pmins;
     else sunMins+=pmins;
@@ -1550,7 +1596,7 @@ function calc(monKey, skip){
      threshold, and the quarter-hour rounding on overtime does not claw
      anything back out of basic. day mode has no threshold, so basic is
      simply whatever was not overtime. */
-  const basicMins=dayOt ? pool-otMins : Math.min(capMins,pool);
+  const basicMins=dayOt ? dayBasicMins : Math.min(capMins,pool);
   const satPaid=satMins>0?Math.max(q(satMins),S("satMin",AT)*60):0;
   const sunPaid=sunMins>0?Math.max(q(sunMins),S("sunMin",AT)*60):0;
 
@@ -1843,6 +1889,30 @@ function plCarryStart(k){
   return first;
 }
 
+/* how much of last slip's overpayment this slip took back on one line.
+   a credit only ever lives one period, so it always came from the slip
+   before. units match the line: hours, nights, or pounds. */
+function plTaken(key,unit,raw,e,cin){
+  if(!cin || !(cin.credit>0) || raw===null || unit==="yn") return 0;
+  const tgt = (unit==="\u00a3" ? e.cash : e.units) + (cin.owed||0);
+  return Math.max(0, Math.min(cin.credit, tgt-raw));
+}
+
+/* the whole of last slip's overpayment this slip took back, in hours and £ */
+function plBack(k,c){
+  if(plLocked(k)) return {h:0,p:0};
+  const p=pslot(k).payslip||{}, cin=plCarryIn(k);
+  if(!Object.keys(cin).some(x=>cin[x]&&cin[x].credit>0)) return {h:0,p:0};
+  const e=plExpected(k, c || (isMonthlyKey(k)?pcalc(k):calc(k)));
+  let h=0, m=0;
+  plLines(k).forEach(([key,,unit,rateKey])=>{
+    const tk=plTaken(key,unit,num(p[key]),e[key],cin[key]); if(!(tk>0)) return;
+    if(unit==="h"){ h+=tk; m+=tk*S(rateKey,pAt(k)); }
+    else m += unit==="n" ? tk*nightRate(pAt(k)) : tk;
+  });
+  return {h,p:m};
+}
+
 /* what is outstanding coming INTO week k */
 function plCarryIn(k){
   const first=plCarryStart(k);
@@ -2088,10 +2158,10 @@ function taxableToDate(k){ const b=cumBasis(k); return b?b.cum:0; }
    and it is why a big overtime week settles itself the week after instead of
    staying wrong. */
 function taxFor(k, taxableThisWeek){
-  const p=parseTaxCode(SS("taxCode")) || parseTaxCode(DEFAULTS.taxCode);
+  const p=parseTaxCode(SSD("taxCode",k)) || parseTaxCode(DEFAULTS.taxCode);
   if(p.kind==="none") return 0;
   if(p.kind==="flat") return r2(Math.max(0,taxableThisWeek)*p.rate/100);
-  if(ytdBusy) return taxWeekly(taxableThisWeek);
+  if(ytdBusy) return taxWeekly(taxableThisWeek,k);
   const b=cumBasis(k);
   if(!b) return taxWeekly(taxableThisWeek);
   const prev = r2(b.cum - taxableThisWeek);
@@ -2222,8 +2292,8 @@ function studentLoanP(niable, per){
   if(!p) return 0;
   return Math.max(0, Math.floor((niable-p.annual/per)*p.rate/100));
 }
-function taxMonthNC(taxable){
-  const p=parseTaxCode(SS("taxCode")) || parseTaxCode(DEFAULTS.taxCode);
+function taxMonthNC(taxable, ds){
+  const p=parseTaxCode(SSD("taxCode",ds)) || parseTaxCode(DEFAULTS.taxCode);
   if(p.kind==="none") return 0;
   if(p.kind==="flat") return r2(Math.max(0,taxable)*p.rate/100);
   const f=52/12;
@@ -2297,10 +2367,10 @@ function cumBasisM(k){
   return {cum:r2(total), n};
 }
 function taxForM(k, taxable){
-  const p=parseTaxCode(SS("taxCode")) || parseTaxCode(DEFAULTS.taxCode);
+  const p=parseTaxCode(SSD("taxCode",k)) || parseTaxCode(DEFAULTS.taxCode);
   if(p.kind==="none") return 0;
   if(p.kind==="flat") return r2(Math.max(0,taxable)*p.rate/100);
-  if(ytdBusy) return taxMonthNC(taxable);
+  if(ytdBusy) return taxMonthNC(taxable,k);
   const b=cumBasisM(k);
   if(!b) return taxMonthNC(taxable);
   const f=52/12, prev=r2(b.cum-taxable);
@@ -2508,7 +2578,10 @@ function render(){
     fig.innerHTML="<span class=\"n\">"+money2(pc.net)+"</span>";
     const pEst=document.getElementById("heroEst");
     if(pEst){ pEst.style.display=""; pEst.textContent="estimate"; }
+    const bk=plHasAny(plCur()) ? plBack(plCur(),pc) : {h:0,p:0}, gap2=gap+bk.p;
     sub.textContent = !plHasAny(plCur()) ? pw+" take home"
+      : bk.p>0 ? (Math.abs(gap2)<0.01 ? "evens out · last slip's overpayment taken back"
+                 : "£"+Math.abs(gap2).toFixed(2)+" "+(gap2<0?"short":"over")+" · after last slip's overpayment taken back")
       : Math.abs(gap)<0.01 ? "the slip matches"
       : "£"+Math.abs(gap).toFixed(2)+" "+(gap<0?"short":"over")+" on the slip"+
         (plGapSource(plCur(),pc) ? " · "+plGapSource(plCur(),pc) : "");
@@ -2723,6 +2796,7 @@ function renderDay(c){
     <div class="notes">
       <label class="lb" for="dayNote">Notes</label>
       <textarea id="dayNote" class="nt-area" rows="2" placeholder="Anything worth remembering about this day — a camera flash, a problem on the road, who you spoke to…">${esc(r.note||"")}</textarea>
+      <button type="button" class="tourlink" id="tourReplay">Show the walkthrough again</button>
     </div>
   `;
 
@@ -2802,6 +2876,8 @@ function renderDay(c){
     if(v.trim()==="") delete rec.note; else rec.note=v;
     save();                         /* quiet save: keep the keyboard up */
   });
+  const replay=box.querySelector("#tourReplay");
+  if(replay) replay.addEventListener("click",()=>{ const dd=load(); dd.settings.tourDone=0; save(); tourStart(); });
 
   if(haReady()&&r.start&&r.end) showRoute(box,curDay,r);
 
@@ -3171,7 +3247,9 @@ function renderPayslip(c){
 
     /* ---- the carry-over strip ---- */
     const unitTxt = n => unit==="h" ? n2(n)+" h" : (unit==="yn"||unit==="\u00a3") ? money(n) : String(n);
-    if(!locked && (owed>0 || cout.owed>0 || cout.credit>0)){
+    const taken = locked ? 0 : plTaken(key,unit,raw,exp,cin);
+    const backTxt = taken>0 ? unitTxt(taken)+" of it is the overpayment on your "+prettyDate(payOf(pprev(k)))+" slip being taken back" : "";
+    if(!locked && (owed>0 || cout.owed>0 || cout.credit>0 || taken>0)){
       const st=document.createElement("div");
       let cls="strip", head="", body="", acts=true;
 
@@ -3180,7 +3258,11 @@ function renderPayslip(c){
          is the thing itself, and the week it clears it says so. */
       const rIn = cin.ref ? expRefText(cin.ref) : null;
       const rOut = cout.ref ? expRefText(cout.ref) : null;
-      if(owed>0 && cout.owed===0 && cout.credit===0){
+      if(taken>0 && owed===0 && cout.owed===0 && cout.credit===0){
+        cls+=" done"; acts=false;
+        head=`<span class="sh">${unitTxt(taken)}</span><span class="sd">taken back — <b>the overpayment on your ${prettyDate(payOf(pprev(k)))} slip</b></span>`;
+        body=`they paid this much extra last time, so this evens it up. nothing is owed either way.`;
+      }else if(owed>0 && cout.owed===0 && cout.credit===0){
         cls+=" done"; acts=false;
         head=`<span class="sh">${unitTxt(owed)}</span><span class="sd">from ${prettyDate(cin.from||k)} — <b>cleared by this slip</b></span>`;
         body= rIn ? `that was <b>${esc(rIn)}</b> from ${prettyDate(cin.from||k)} — finally paid`
@@ -3196,7 +3278,7 @@ function renderPayslip(c){
           : `expecting <b>${unitTxt(exp.units+owed)}</b> in total — ${unitTxt(exp.units)} this ${pWord(k)}, ${unitTxt(owed)} owed`;
       }else if(cout.owed>0){
         head=`<span class="sh">${unitTxt(cout.owed)}</span><span class="sd">short on this slip${rOut?" — "+esc(rOut)+rcKeyButton(cout.ref.key):""}</span>`;
-        body=`carried into next ${pWord(k)}`;
+        body=`carried into next ${pWord(k)}`+(taken>0?` — on top of that, ${backTxt}`:"");
       }else{
         cls+=" over"; acts=false;
         head=`<span class="sh">${unitTxt(cout.credit)}</span><span class="sd">more than logged — noted, not chased</span>`;
@@ -3404,15 +3486,24 @@ function renderPayslip(c){
   document.getElementById("plTot").querySelectorAll(".ratewarn")
     .forEach(b=>b.addEventListener("click",goRates));
 
-  const worst=[];
+  const worst=[], back=[];
+  let backH=0, backP=0;
+  const cinAll = locked ? {} : plCarryIn(k);
   plLines(k).forEach(([key,label0,unit,rateKey])=>{
     const label=plLabel(key,label0,pAt(k));
     const raw=num(p[key]); if(raw===null) return;
+    const tk=plTaken(key,unit,raw,e[key],cinAll[key]);
+    if(tk>0){
+      const tp = unit==="h" ? tk*S(rateKey,pAt(k)) : unit==="n" ? tk*nightRate(pAt(k)) : tk;
+      if(unit==="h") backH+=tk;
+      backP+=tp;
+      back.push(label+" "+(unit==="h"?n2(tk)+" h, ":"")+money(tp));
+    }
     if(unit==="h"){
-      const gh=raw-e[key].units;
+      const gh=raw-e[key].units+tk;
       if(Math.abs(gh)>=0.005) worst.push({label,gh,gp:gh*S(rateKey,pAt(k))});
     }else{
-      const gp=plActualCash(key,raw,k)-e[key].cash;
+      const gp=plActualCash(key,raw,k)-e[key].cash+(unit==="n"?tk*nightRate(pAt(k)):tk);
       if(Math.abs(gp)>=0.01) worst.push({label,gh:null,gp});
     }
   });
@@ -3445,16 +3536,20 @@ function renderPayslip(c){
   else if(!plHasAny(k))
     note.textContent="Type the hours off each line of the payslip. Anything you leave blank is taken as agreeing with what I logged, so you only need to fill in what looks off.";
   else if(!worst.length)
-    note.textContent="Every line you entered matches what I logged. Nothing to chase.";
+    note.textContent=(back.length ? "Last slip overpaid you and this one took it back ("+back.join(", ")+"). That evens out. " : "")
+      +"Every line you entered matches what I logged. Nothing to chase.";
   else{
     const list=worst.slice(0,3).map(w=>
       w.label+" "+(w.gp>0?"over":"short")+" by "+
       (w.gh===null?money(Math.abs(w.gp)):n2(Math.abs(w.gh))+" h, "+money(Math.abs(w.gp)))
     ).join(", ");
-    note.textContent=(Math.abs(hGap)<0.005
-      ? "The hours add up, but the lines do not match: "
-      : hGap<0 ? "You are "+n2(-hGap)+" hours light, "+money(-pGap)+" before tax. "
-               : "You were paid "+n2(hGap)+" hours more than I logged. ")+list+".";
+    const hG=hGap+backH, pG=pGap+backP;
+    note.textContent=(back.length ? "Last slip overpaid you and this one took it back ("+back.join(", ")+") — that part evens out. Apart from that: " : "")
+      +(Math.abs(hG)<0.005
+      ? "the hours add up, but the lines do not match: "
+      : hG<0 ? (back.length?"you are ":"You are ")+n2(-hG)+" hours light, "
+               +(pG<=0 ? money(-pG)+" before tax. " : "though "+money(pG)+" up before tax from the other lines. ")
+             : (back.length?"you were ":"You were ")+"paid "+n2(hG)+" hours more than I logged. ")+list+".";
   }
 }
 
@@ -3482,10 +3577,11 @@ function renderHistory(){
     const paid=payOf(k);
     let tail, cls="";
     if(plHasAny(k)){
-      const t=plTotals(k,c), gh=t.slipH-t.expH, gp=t.slipPay-t.expPay;
-      if(Math.abs(gh)<0.005 && Math.abs(gp)<0.01){ tail="slip matched"; cls="ok"; }
-      else if(Math.abs(gh)<0.005){ tail="slip "+(gp<0?"short ":"over ")+money(Math.abs(gp)); cls="bad"; }
-      else { tail="slip "+(gh<0?"short ":"over ")+n2(Math.abs(gh))+"h, "+money(Math.abs(gp)); cls="bad"; }
+      const t=plTotals(k,c), bk=plBack(k,c), gh=t.slipH-t.expH+bk.h, gp=t.slipPay-t.expPay+bk.p;
+      const bt = bk.p>0 ? "took back last overpayment · " : "";
+      if(Math.abs(gh)<0.005 && Math.abs(gp)<0.01){ tail=bk.p>0?"took back last overpayment · evens out":"slip matched"; cls="ok"; }
+      else if(Math.abs(gh)<0.005){ tail=bt+"slip "+(gp<0?"short ":"over ")+money(Math.abs(gp)); cls="bad"; }
+      else { tail=bt+"slip "+(gh<0?"short ":"over ")+n2(Math.abs(gh))+"h, "+money(Math.abs(gp))+((gh<0)!==(gp<0)&&Math.abs(gp)>=0.01?(gp<0?" down":" up"):""); cls="bad"; }
     } else {
       tail = paid<=iso(new Date()) ? "no slip checked" : "not paid yet";
     }
@@ -3681,7 +3777,8 @@ function eraSummary(r){
   const night = Number(g("meal"))>0
     ? "\u00a3"+n2(Number(g("nightOut")))+" + \u00a3"+n2(Number(g("meal")))+" a night"
     : "\u00a3"+n2(Number(g("nightOut"))+Number(g("meal")))+" a night";
-  return "\u00a3"+n2(Number(g("basicRate")))+" basic \u00b7 "+rule+" \u00b7 "+night;
+  const tc = (r.taxCode===undefined||r.taxCode===null||r.taxCode==="") ? "tax code same as now" : "tax code "+r.taxCode;
+  return "\u00a3"+n2(Number(g("basicRate")))+" basic \u00b7 "+rule+" \u00b7 "+night+" \u00b7 "+tc;
 }
 
 function buildRateHist(el){
@@ -3689,7 +3786,18 @@ function buildRateHist(el){
   if(!h.length){ el.innerHTML=""; return; }
   el.innerHTML=`<p class="note" style="margin-top:14px"><b>Rates you used to be on.</b> Weeks ending on or before these dates are worked out with them, and always will be.</p>`+
     h.map((e,i)=>`<div class="field"><label>Up to ${shortDate(e.to)}<span class="hint">${eraSummary(e.rates||{})}</span></label>
+      <button class="btn" data-eratc="${i}">Tax code</button>
       <button class="btn" data-era="${i}">Remove</button></div>`).join("");
+  el.querySelectorAll("button[data-eratc]").forEach(b=>b.addEventListener("click",()=>{
+    const i=Number(b.dataset.eratc), d=load(), e=(d.settings.rateHist||[])[i];
+    if(!e) return;
+    const cur0=(e.rates&&e.rates.taxCode)||SS("taxCode");
+    const ans=prompt("Tax code for the weeks up to "+shortDate(e.to)+"?\n\nTake it off a payslip from that job, e.g. 1257L. That is a zero in 0T, not the letter O.",cur0);
+    if(ans===null) return;
+    const v=String(ans).trim().toUpperCase();
+    if(!parseTaxCode(v)){ alert("\""+v+"\" is not a tax code the app recognises."); return; }
+    e.rates=e.rates||{}; e.rates.taxCode=v; save(); render(); buildRateHist(el);
+  }));
   el.querySelectorAll("button[data-era]").forEach(b=>b.addEventListener("click",()=>{
     const i=Number(b.dataset.era), d=load(), e=(d.settings.rateHist||[])[i];
     if(!e) return;
@@ -3721,6 +3829,7 @@ function rateChangeFlow(){
   if(h.some(e=>e.to>=to)){ alert("You already have rates ending on or after "+shortDate(to)+"."); return; }
   const rates={};
   RATE_KEYS.forEach(k=>{ rates[k]=rawS(k,null); });
+  STR_ERA_KEYS.forEach(k=>{ rates[k]=rawSS(k,null); });
   if(!confirm("Keeping these for every week up to "+shortDate(snapped)+":\n\n"+eraSummary(rates)+
       "\n\nFrom "+shortDate(addDays(snapped,1))+" the boxes above take over — edit them to your new figures next.")) return;
   d.settings.rateHist=h.concat([{to,rates}]).sort((a,b)=>a.to<b.to?-1:1);
@@ -3911,9 +4020,38 @@ function taxCodeField(){
     }
     const said=prompt(TAX_WARN,"");
     if(said===null || said.trim().toLowerCase()!=="understood"){ inp.value=code; return; }
-    d.settings.taxCode=v; save(); render();
+    taxCodeFrom(d,v);
+    save(); render();
   });
   return row;
+}
+
+/* a new tax code is read off a payslip, so it starts with that slip: the
+   latest period whose slip is up, and everything after. every period before
+   it keeps the code it was taxed on. done by ending a dated era the day
+   before that period — the same mechanism a rate change uses. */
+function taxCodeFrom(d,v){
+  const s=d.settings, K=lastPaidPer(), start=perFirst(K), to=addDays(start,-1);
+  const old=rawSS("taxCode",to);
+  const logged=Object.keys(d.days||{}).some(ds=>ds<=to);
+  if(old.toUpperCase()===v || !logged){ s.taxCode=v; return; }
+  if(!confirm("Tax code "+v+" from your "+prettyDate(payOf(K))+" payday onwards.\n\n"+
+              "Paydays before that keep "+old+".")) return;
+  const h=rateHist().map(e=>Object.assign({},e,{rates:Object.assign({},e.rates||{})}));
+  /* eras wholly before the change: pin whatever code they were reading */
+  h.forEach(e=>{ if(e.to<=to && !(e.rates.taxCode)) e.rates.taxCode=rawSS("taxCode",e.to); });
+  /* eras reaching past it: from the change on they are on the new code */
+  const later=h.filter(e=>e.to>to);
+  if(!h.some(e=>e.to===to)){
+    /* the weeks up to the change keep the rates they were already priced at */
+    const base=rateSetFor(to), rates={};
+    RATE_KEYS.forEach(k=>{ rates[k]= base ? base[k] : rawS(k,null); });
+    rates.taxCode=old;
+    h.push({to,rates});
+  }
+  later.forEach(e=>{ e.rates.taxCode=v; });
+  s.rateHist=h.sort((x,y)=>x.to<y.to?-1:1);
+  s.taxCode=v;
 }
 
 /* ---- student loan ---- */
@@ -4482,6 +4620,7 @@ document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()
   /* the bar always lands on the top of a tab: the settings list, this month */
   door=null;
   if(b.dataset.tab==="cal") calMonth=monthKey(iso(new Date()));
+  if(b.dataset.tab==="day") curDay=iso(new Date());   /* Today means today */
   switchTab(b.dataset.tab);
 }));
 document.getElementById("backCal").addEventListener("click",()=>{ calMonth=monthKey(curDay); switchTab("cal"); });
@@ -4805,7 +4944,7 @@ function setupOpen(mode){
     setupClose();
   });
 }
-function setupClose(){ document.getElementById("setup").classList.add("hidden"); suMode=null; render(); }
+function setupClose(){ document.getElementById("setup").classList.add("hidden"); suMode=null; render(); tourCheck(); }
 function suExample(){
   const box=document.getElementById("setup"), ex=box.querySelector("#suEx");
   if(!ex) return;
@@ -4858,6 +4997,7 @@ function setupSave(){
   const fChanged = oldF.freq!==newF.freq || String(oldF.payDate)!==String(newF.payDate) || String(oldF.payCut)!==String(newF.payCut);
   /* the old rates, kept for every week up to `to` */
   const rates={}; RATE_KEYS.forEach(k=>{ rates[k]=rawS(k,null); });
+  STR_ERA_KEYS.forEach(k=>{ rates[k]=rawSS(k,null); });
   s.rateHist=rateHist().concat([{to,rates}]).sort((a,b)=>a.to<b.to?-1:1);
   if(fChanged) s.freqHist=freqHist().concat([Object.assign({to},oldF)]).sort((a,b)=>a.to<b.to?-1:1);
   /* switching weekly<->monthly is a new payroll as far as tax goes: the year
@@ -4879,6 +5019,116 @@ function setupSave(){
    have already read it. Raise INTRO_REV by hand, and only when the wording
    actually changes. */
 const INTRO_REV=1;
+/* ============ guided tour (v1.0) ============
+   first-run coach marks on the Today screen. runs once for everyone after the
+   update (its own flag, so existing users see it too), replayable from the
+   link under the notes. points at live elements; if an expense row is not on
+   screen it adds a blank one first so steps 3-5 have something to highlight. */
+const TOUR_REV=1;
+const TOUR_STEPS=[
+  {sel:".weeknav", pad:4, text:"Use the arrows to move between days. Tapped the wrong one? Tap the date in the middle to jump straight back to today."},
+  {sel:"#hPill", pad:6, text:"Tap here any time for your drivers' hours \u2014 driving limits, rests used, and any weekly rest you owe back."},
+  {sel:".expb", pad:8, text:"Put anything you paid out here. It gets added back on top of your pay.", ensureExp:true},
+  {sel:".erow .epk", pad:6, text:"It says parking because that is the most common one. Tap it off and type what it really was in the box beside it.", ensureExp:true},
+  {sel:".erow .rc", pad:6, text:"Tap this to snap a photo of the receipt, so it is saved with that expense.", ensureExp:true},
+  {sel:"#dayNote", pad:6, text:"Anything worth remembering about the day \u2014 jot it here and it saves with the day."}
+];
+let tourI=-1, tourAddedExp=false;
+
+function tourActive(){ return !!document.getElementById("tourDim"); }
+
+function tourStart(){
+  if(tab!=="day"){ switchTab("day"); }
+  tourI=-1; tourAddedExp=false;
+  const dim=document.createElement("div"); dim.className="tour-dim"; dim.id="tourDim";
+  dim.innerHTML='<div class="hole"></div><div class="ring"></div>';
+  document.body.appendChild(dim);
+  const card=document.createElement("div"); card.className="tour-card"; card.id="tourCard";
+  document.body.appendChild(card);
+  dim.addEventListener("click",e=>{ if(e.target===dim) {} });
+  tourNext();
+}
+
+function tourEnsureExpenseRow(){
+  /* step needs an expense row; add a blank one if none is shown */
+  if(document.querySelector(".erow")) return;
+  const d=load(), r=d.days[curDay]=d.days[curDay]||{};
+  r.exp=Array.isArray(r.exp)?r.exp:[];
+  r.exp.push({a:0,d:"",p:true});     // a parking row, blank amount
+  tourAddedExp=true; save(); renderDay(calc(cur()));
+}
+
+function tourCleanupExp(){
+  if(!tourAddedExp) return;
+  const d=load(), r=d.days[curDay]; if(r&&Array.isArray(r.exp)){
+    /* drop a trailing blank parking row we added */
+    const last=r.exp[r.exp.length-1];
+    if(last && (!last.a||last.a===0) && last.p && !last.d){ r.exp.pop(); if(!r.exp.length) delete r.exp; save(); }
+  }
+  tourAddedExp=false;
+}
+
+function tourEnd(){
+  tourCleanupExp();
+  const dim=document.getElementById("tourDim"), card=document.getElementById("tourCard");
+  if(dim) dim.remove(); if(card) card.remove();
+  const dd=load(); dd.settings.tourDone=TOUR_REV; save();
+  renderDay(calc(cur()));
+}
+
+function tourNext(){
+  tourI++;
+  if(tourI>=TOUR_STEPS.length){ tourEnd(); return; }
+  const st=TOUR_STEPS[tourI]; st._nudged=false;
+  if(st.ensureExp) tourEnsureExpenseRow();
+  let el=document.querySelector(st.sel);
+  if(!el){ tourNext(); return; }          // nothing to point at, skip on
+  el.scrollIntoView({block:"center",behavior:"instant"});
+  requestAnimationFrame(()=>tourPlace(st,el));
+}
+
+function tourPlace(st,el){
+  const dim=document.getElementById("tourDim"), card=document.getElementById("tourCard");
+  if(!dim||!card) return;
+  const r=el.getBoundingClientRect(), p=st.pad||6;
+  const hole=dim.querySelector(".hole"), ring=dim.querySelector(".ring");
+  const x=r.left-p, y=r.top-p, w=r.width+2*p, h=r.height+2*p;
+  [hole,ring].forEach(n=>{ n.style.left=x+"px"; n.style.top=y+"px"; n.style.width=w+"px"; n.style.height=h+"px"; });
+  const last=tourI===TOUR_STEPS.length-1;
+  card.innerHTML=
+    '<p class="tt">'+st.text+'</p>'+
+    '<div class="row"><span class="step">'+(tourI+1)+' of '+TOUR_STEPS.length+'</span>'+
+    '<div class="btns"><button class="skip" id="tourSkip">Skip</button>'+
+    '<button class="go" id="tourGo">'+(last?"Done":"Next")+'</button></div></div>';
+  /* place card below the highlight if there's room, else above */
+  /* measure the card, then sit it below the highlight if it fits, else above */
+  const vh=window.innerHeight, nav=(document.querySelector("nav")||{offsetHeight:0}).offsetHeight;
+  card.style.top="0px"; const cardH=card.offsetHeight;
+  const room=vh-nav-8;
+  let top;
+  if(y+h+12+cardH < room) top=y+h+12;
+  else if(y-cardH-12 >= 8) top=y-cardH-12;
+  else if(!st._nudged){
+    /* no room either side: scroll so the caption fits underneath, then redo */
+    st._nudged=true; window.scrollBy(0,(y+h+12+cardH)-room);
+    requestAnimationFrame(()=>tourPlace(st,el)); return;
+  } else top=Math.max(8,room-cardH);
+  card.style.top=top+"px";
+  card.style.left="50%"; card.style.transform="translateX(-50%)";
+  document.getElementById("tourGo").addEventListener("click",tourNext);
+  document.getElementById("tourSkip").addEventListener("click",tourEnd);
+}
+
+function tourCheck(){
+  const d=load();
+  if(Number(d.settings.tourDone||0) >= TOUR_REV) return;
+  /* wait until the intro/setup overlays are done */
+  if(!document.getElementById("intro").classList.contains("hidden")) return;
+  if(!document.getElementById("setup").classList.contains("hidden")) return;
+  if(tab!=="day") return;
+  tourStart();
+}
+
 function introCheck(){
   const d=load();
   if(Number(d.settings.introRev||0) >= INTRO_REV) return;
@@ -4890,6 +5140,7 @@ function introCheck(){
     dd.settings.introRev=INTRO_REV; save();
     el.classList.add("hidden");
     setupCheck();
+    tourCheck();
   });
 }
 function setupCheck(){
@@ -4903,6 +5154,7 @@ bhAutoCheck();
 taxYearCheck();
 introCheck();
 setupCheck();
+tourCheck();
 if(navigator.storage && navigator.storage.persist){
   navigator.storage.persisted().then(ok=>{ if(!ok) navigator.storage.persist().catch(()=>{}); }).catch(()=>{});
 }

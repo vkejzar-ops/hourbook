@@ -13,7 +13,7 @@ This file exists so a future conversation can pick the project up cold.
 
 | File | What it is |
 |---|---|
-| `index.html` | The whole app — markup, CSS and JS in one file, ~4,110 lines |
+| `index.html` | The whole app — markup, CSS and JS in one file, ~4,400 lines |
 | `sw.js` | Service worker, cache-first |
 | `icon-180.png`, `icon-192.png`, `icon-512.png`, `icon.svg` | Home-screen icons |
 | `preview-*.html` | Throwaway design mockups. **Not part of the app. Never upload these.** |
@@ -24,11 +24,17 @@ This file exists so a future conversation can pick the project up cold.
 
 ## Version discipline
 
-`const BUILD="v32"` in `index.html` and `const CACHE = "hourbook-v32"` in `sw.js`
-**must be bumped together on every change.** The test `build.js` fails if they
-drift. The build number is shown in Settings → About.
+`const BUILD="v1.0"` in `index.html` and `const CACHE = "hourbook-v1.0"` in `sw.js`
+**must be bumped together on every change.** The build number is shown in
+Settings → About.
 
-Current version: **v32**.
+Current version: **v1.0**. The internal counter reached v38.1 and was then
+renumbered to **v1.0** for the public release — "38 is crazy". Going backwards
+is safe: phones compare the cache *name*, not the number, so `hourbook-v1.0`
+is simply a different cache from `hourbook-v38`. **From v1.0 on, bump by 0.1
+each release** (v1.1, v1.2, …).
+
+Latest changes: see **"v38.1 → v1.0"** further down, just above "What v36 changed".
 
 ---
 
@@ -299,7 +305,8 @@ line and added to what the next slip should pay.
 - **Overpayments are the deliberate mirror, not a symmetry**: noted with a
   neutral grey strip, no button, and they live exactly one week. If the next
   slip comes up short by the same amount on the same line, that is them taking
-  it back and it is absorbed silently. Otherwise it lapses.
+  it back and it is absorbed — and since v1.0 the strip, summary and headline
+  say so ("taken back — the overpayment on your … slip"). Otherwise it lapses.
 - **Threshold**: shortfalls under 1 hour are ignored outright, since overtime
   rounds to the quarter hour and a stray 0.25 is arithmetic, not a shortfall.
   Editable in Setup as `owedThresh`. It applies to **hourly lines only** — a
@@ -387,7 +394,13 @@ finish-time handler; the gov.uk fetch does not.
 
 ## Tests
 
-51 suites in `/home/claude/t/`, 1280 checks, all green as of v29. **Those suites were not available for v30** (the container resets); v30 was checked with a fresh Playwright/Chromium harness instead — `t_equiv.py` (v29 vs v30 maths, 12 checks), `t_ui.py` (every tab and door, strict rates on, 85), `t_rc.py` (receipts end to end, 35). v31 added `t_pill.py` (the three pill states, 19 checks); all four suites green on v32. jsdom could not be installed; Playwright is preinstalled. Run with
+The current Python/Playwright harness runs 12 suites, **391 checks, all green
+as of v1.0**: `t_bound` 12, `t_equiv` 12, `t_map` 23, `t_pill` 19, `t_rc` 35,
+`t_ui` 87, `t_v33` 36, `t_v34` 5, `t_v35` 24, `t_v36` 5, `t_v37` 105, `t_tour`
+28. Run from `/home/claude/t/` with `python3 <file>.py`; `t_equiv`/`t_rc` need
+`OLD=/home/claude/v32.html`. The clock is fixed to 29 Sep 2026 — patch
+`harness.CLOCK` before importing to move it. The older node/jsdom suites below
+(1280 checks, green as of v29) predate the container resets — `t_equiv.py` (v29 vs v30 maths, 12 checks), `t_ui.py` (every tab and door, strict rates on, 85), `t_rc.py` (receipts end to end, 35). v31 added `t_pill.py` (the three pill states, 19 checks); all four suites green on v32. jsdom could not be installed; Playwright is preinstalled. Run with
 `node <file>.js`. (`dom.js` is the bootstrap and prints no count of its own.)
 
 `test.js` · `hol.js` · `new2.js` · `holui.js` · `dom.js` · `hdr.js` · `imp.js` ·
@@ -847,6 +860,87 @@ Tax, NI, pension and student loan are deliberately *not* era-aware. They are
 statutory, they already move with the tax year, and the real figures come off
 the slip. Changing jobs mid-year is a P45 matter and the app does not try to
 model it.
+
+## v38.1 → v1.0
+
+The internal counter ran v33–v38.1; this is the first public release and is
+renumbered **v1.0**. v33–v36 each have their own "What changed" section below.
+v37, v38, v38.1 and v1.0 are summarised here.
+
+### v37 — no preset rates, and weekly-or-monthly pay
+
+Covered in full under "Weekly or monthly pay, and first-run setup" above. In
+short: a new install starts with every employer rate blank (existing users get
+their old built-in figures frozen into a dated era so nothing moves); a guided
+**setup screen** on first run and on a job change; **monthly pay** alongside
+weekly, with its own cumulative-by-tax-month engine; and a P45-style handover
+when switching weekly ↔ monthly.
+
+### v38 — the rest-owed card
+
+Weekly-rest-owed debt shows as its own compact line on the hours screen
+(`#dhRest`) and a card on Today, via `owedCarry(upto)`, without re-labelling a
+full-rest week. The big amber billboards tried on Today/Rest were reverted at
+Vit's request; the "No pay rates yet" nudge stayed. The first-run intro was
+rewritten as "How Hourbook works", noting rates are optional if you only track
+hours.
+
+### v38.1 — the tax code remembers which era it was
+
+Old rate eras now store the tax code that was in force then (`rawSS`/`SSD`,
+`STR_ERA_KEYS=["taxCode"]`), so an old week is taxed on its own code, not
+today's. Each "rates you used to be on" row gets a **Tax code** button to set
+it. The Woodland era (up to 13 Sep) is **1257L**; the new job is **0T**.
+
+### v1.0 — renumber, walkthrough, and three pay fixes
+
+**Renumbered** from v38.1. `BUILD="v1.0"`, `CACHE="hourbook-v1.0"`.
+
+**First-run walkthrough.** A proper coach-mark tour of the **Today** screen only
+(six steps: the week arrows + date header, the hours pill, the expenses block,
+the parking chip, the receipt icon, the day note). Dark overlay, spotlight
+cut-out, caption, Next. Runs **once for everyone** after this update (its own
+`tourDone` flag, `TOUR_REV=1`, which nobody has), and a "Show the walkthrough
+again" link under the notes replays it. On a new install it runs intro → setup
+→ tour. It adds a blank parking expense row if the day has none so steps 3–5
+have a target, and removes it on finish; a real expense is left alone.
+`.tour-card` is `position:fixed` so it never overlaps its own highlight.
+Functions: `tourStart/tourNext/tourPlace/tourEnd/tourCheck/tourActive`,
+`tourEnsureExpenseRow`, `tourCleanupExp`. `t_tour.py`, 28 checks.
+
+**Today tab always lands on today.** The nav handler reset the calendar month
+but never `curDay`, so "Today" reopened the last day viewed. Fixed with
+`if(b.dataset.tab==="day") curDay=iso(new Date());`.
+
+**Day-mode basic capped at a flat 8h.** In daily-overtime mode, basic was
+derived as pool minus overtime, and because each day's overtime was
+quarter-rounded (sometimes down), the leftover minutes leaked into basic — a
+week read 39.95 or 40.03 instead of 40. Now a weekday over 8h gives **exactly 8
+basic** and the rest is overtime (rounded there); a day under 8h has its basic
+rounded instead. `dayBasicMins` accumulator;
+`basicMins = dayOt ? dayBasicMins : Math.min(capMins,pool)`. Saturdays/Sundays
+were already outside the weekday pool. The one intended figure change is
+tolerated in `t_equiv`/`t_rc`, keyed on `otMode=="day"`.
+
+**Overpayment taken back is now named.** A line that was overpaid last slip and
+clawed back this slip used to just show as that many hours short. It now reads
+"40.00 h — taken back — the overpayment on your Fri 2 Oct slip — nothing owed
+either way", and the summary, hero sub-line and past-paydays list say the same.
+`plTaken(key,unit,raw,e,cin)` gives the per-line amount, `plBack(k,c)` the
+whole-slip totals in hours and £; the summary separates the evened-out part
+from any real remaining gap and copes with hours and money pointing opposite
+ways.
+
+**Tax code changes start at the latest slip.** Changing the code in Settings no
+longer rewrites the whole current era. `taxCodeFrom(d,v)` seals the old code
+onto every payday **before** the latest slip that is up (`lastPaidPer`), and the
+new code runs from that slip onwards — because you read the new code off that
+slip. It confirms "Tax code X from your <payday> onwards; paydays before that
+keep <old>". Fresh install with nothing logged just sets it, no question.
+
+**Tests.** Full suite green — 391 checks. New in `t_v37.py`: Today-resets-to-today,
+day-mode basic cap, overpayment taken back, and tax-code-from-latest-slip.
+`t_tour.py` (28) added.
 
 ## What v36 changed
 
