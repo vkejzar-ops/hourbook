@@ -28,7 +28,7 @@ This file exists so a future conversation can pick the project up cold.
 **must be bumped together on every change.** The build number is shown in
 Settings → About.
 
-Current version: **v1.0**. The internal counter reached v38.1 and was then
+Current version: **v1.2**. The internal counter reached v38.1 and was then
 renumbered to **v1.0** for the public release — "38 is crazy". Going backwards
 is safe: phones compare the cache *name*, not the number, so `hourbook-v1.0`
 is simply a different cache from `hourbook-v38`. **From v1.0 on, bump by 0.1
@@ -860,6 +860,20 @@ Tax, NI, pension and student loan are deliberately *not* era-aware. They are
 statutory, they already move with the tax year, and the real figures come off
 the slip. Changing jobs mid-year is a P45 matter and the app does not try to
 model it.
+
+## v1.2 (was built as v1.1; renumbered because a v1.1 was already uploaded)
+
+- **Day-mode basic fixed with holidays:** each Mon–Fri worked day over the
+  daily threshold adds a flat 8h to basic; a booked holiday is its own line at
+  its own hours. Nothing is subtracted from basic (w/c 12 Oct showed 8, now 24).
+- **Rounding is a setting** (Pay rates → "How your hours are rounded"):
+  nearest/down/up to the quarter, half hour, 10 or 5 minutes, or none. Stored
+  as `roundTo`/`roundDir`, era-aware like the overtime rule. Default is
+  nearest 15, so nothing changes until it is set. The payslip grace follows it.
+- **Check for updates** button under About: clears the app's caches,
+  unregisters the service worker and reloads fresh. Hours and receipts untouched.
+- **Receipt photos in the backup:** stored under `receipts` as data URLs;
+  restore puts them back. Old backups without photos still restore.
 
 ## v38.1 → v1.0
 

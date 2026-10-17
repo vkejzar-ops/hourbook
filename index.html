@@ -866,6 +866,8 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
     <div class="door hidden" data-door="about" data-title="About Hourbook">
       <div class="fold">
     <p class="note" id="verNote"></p>
+        <button class="btn" id="updBtn">Check for updates</button>
+        <p class="note" id="updMsg">Gets the newest version. Your hours and receipts stay as they are.</p>
       </div>
     </div>
   </section>
@@ -988,6 +990,10 @@ const DEFAULTS = {
      pays anything past otDayHours on a single weekday at the overtime rate
      and has no weekly threshold at all. */
   otMode:"week", otDayHours:8,
+  /* how worked time is rounded before it is paid: the step in minutes (1 =
+     no rounding) and which way — "near", "down" or "up". an employer rule, so
+     it belongs to an era like the overtime rule. */
+  roundTo:15, roundDir:"near",
   bhHours:8,
   holHours:8,
   sickRate:"",
@@ -1001,7 +1007,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v1.0";
+const BUILD="v1.2";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -1064,7 +1070,7 @@ function save(){
 const STR_ERA_KEYS=["taxCode"];
 const RATE_KEYS=["basicRate","basicCap","otRate","satRate","satMin","sunRate","sunMin",
                  "nightOut","meal","attendance","bhHours","holHours","sickRate",
-                 "otMode","otDayHours"];
+                 "otMode","otDayHours","roundTo","roundDir"];
 
 /* closed eras, oldest first, each ending on the Sunday it stopped applying.
    settings hold the CURRENT rates, exactly as they always have — the history
@@ -1148,6 +1154,14 @@ function duration(a,b){
   return d;
 }
 const q = m => Math.round(m/15)*15;
+/* the rounding rule as set (v1.1). step in minutes; 1 or less means none. */
+function roundMins(m,step,dir){
+  step=Number(step); if(!isFinite(step)||step<=1) return Math.round(m);
+  const f = dir==="down" ? Math.floor : dir==="up" ? Math.ceil : Math.round;
+  return f(m/step)*step;
+}
+function roundStepAt(ds){ const v=Number(rawS("roundTo",ds)); return isFinite(v)&&v>0?v:15; }
+function roundDirAt(ds){ const v=String(rawS("roundDir",ds)||"near"); return (v==="down"||v==="up")?v:"near"; }
 function hm(m){
   if(!m) return "0h";
   const h=Math.floor(m/60), mm=Math.round(m%60);
@@ -1476,6 +1490,9 @@ function calc(monKey, skip){
      as at today. a week already paid keeps the money it was paid under. */
   const AT=monKey;
   const dayOt=SMODE(AT)==="day";
+  /* rounding as set for this week's era — shadows the fixed quarter-hour q */
+  const roundStep=roundStepAt(AT), roundDir=roundDirAt(AT);
+  const q = m => roundMins(m,roundStep,roundDir);
   const dates=[]; for(let i=0;i<7;i++) dates.push(addDays(monKey,i));
   const wk=d.weeks[monKey]||{};
   let weekdayMins=0, satMins=0, sunMins=0, bhWorkedPaid=0, bhWorkedMins=0;
@@ -1596,14 +1613,18 @@ function calc(monKey, skip){
      threshold, and the quarter-hour rounding on overtime does not claw
      anything back out of basic. day mode has no threshold, so basic is
      simply whatever was not overtime. */
-  const basicMins=dayOt ? dayBasicMins : Math.min(capMins,pool);
+  const basicMins=dayOt ? dayBasicMins+bhMins+holMins : Math.min(capMins,pool);
   const satPaid=satMins>0?Math.max(q(satMins),S("satMin",AT)*60):0;
   const sunPaid=sunMins>0?Math.max(q(sunMins),S("sunMin",AT)*60):0;
 
   /* holiday hours fill the basic pool first, so they are never overtime.
      split them out so each matches its own line on the slip. */
-  const holBasic=Math.min(holMins,basicMins);
-  const basicWorked=basicMins-holBasic;
+  /* day mode: nothing is subtracted. basic is the flat 8h (or the actual
+     hours on a shorter day) from each worked weekday, plus any bank holiday
+     not worked; a booked holiday is its own line at its own hours. week mode
+     keeps its old shape, where holiday sits inside the basic pool. */
+  const holBasic=dayOt ? holMins : Math.min(holMins,basicMins);
+  const basicWorked=dayOt ? dayBasicMins+bhMins : basicMins-holBasic;
 
   const holPay=dec(holBasic)*S("basicRate",AT);
   const basicPay=dec(basicWorked)*S("basicRate",AT);
@@ -1678,7 +1699,7 @@ function calc(monKey, skip){
     holDays, holMins, sickDays, unpDays, ssp, sspPred, sickRate, expenses, expItems,
     bhPending, holPending,
     workedMins, daysWorked, dedMins, paidMins:basicMins+otMins+satPaid+sunPaid+bhWorkedPaid,
-    basicMins, basicWorked, holBasic, otMins, satPaid, sunPaid,
+    basicMins, basicWorked, holBasic, otMins, satPaid, sunPaid, roundStep, roundDir,
     beforePension, pension, pensionable, cash, taxable, tax, ni, sloan, net,
     driveMins, extDrive, redRest, shortRest, assumedDrive,
     wtdMins, wtdDays, wtdMissing,
@@ -1871,7 +1892,15 @@ const PL_BACK  = 52;
    a real shortfall — flagged AND carried over as owed (he can still write it
    off). there is no middle "flagged but not carried" band any more. */
 const GRACE_PER_DAY = 7.5/60;   /* hours of grace earned per day worked */
-function plGrace(key, days){ return key==="ot" ? GRACE_PER_DAY*(days||0) : 0; }
+/* v1.1: the grace follows the rounding rule — half a step per day when it
+   rounds to the nearest, a whole step when it only ever rounds one way. with
+   the default (nearest 15) this is exactly the old 7.5 minutes. */
+function plGrace(key, days, step, dir){
+  if(key!=="ot") return 0;
+  if(step===undefined) return GRACE_PER_DAY*(days||0);
+  const st=Number(step)>1?Number(step):0;
+  return (dir==="near"?st/2:st)/60*(days||0);
+}
 
 function plBlank(){ return {owed:0, from:null, credit:0, ref:null}; }
 
@@ -1968,7 +1997,7 @@ function plStep(w,inSt){
       if(unit==="n" && raw===null && chk.nights) val=target;   /* ticked = checked and agrees */
       if(val===null){ if(owed>0) out[key]={owed,from,credit:0,ref}; return; }
 
-      const grace = plGrace(key, cw ? cw.daysWorked : 0);
+      const grace = plGrace(key, cw ? cw.daysWorked : 0, cw ? cw.roundStep : undefined, cw ? cw.roundDir : undefined);
       const diff = val - target;
       if(diff>=0){
         owed=0; from=null;
@@ -3695,11 +3724,43 @@ function disputeCsv(){
 
 /* ============ backup ============ */
 function backupName(){ return "hourbook-backup-"+iso(new Date())+".json"; }
-function doBackup(){
+/* v1.1: the receipt photos ride along in the same file, each one as text
+   (a data: URL), so one file brings back everything. only photos an expense
+   still points at go in. */
+const blobToData = b => new Promise((res,rej)=>{ const f=new FileReader(); f.onload=()=>res(f.result); f.onerror=()=>rej(f.error); f.readAsDataURL(b); });
+async function dataToBlob(u){ return (await fetch(u)).blob(); }
+async function backupPhotos(){
+  try{
+    const all=(await rcAll())||[], refs=rcRefs(), out=[];
+    for(const x of all){
+      if(!x || !x.blob || !refs.has(x.id)) continue;
+      out.push({id:x.id, type:x.type||x.blob.type||"image/jpeg", ds:x.ds, t:x.t, data:await blobToData(x.blob)});
+    }
+    return out;
+  }catch(e){ return []; }
+}
+async function doBackup(){
   /* the Home Assistant token is a key to someone's house: never in a file */
   const out=JSON.parse(JSON.stringify(load())); if(out.settings) delete out.settings.haToken;
+  const photos=await backupPhotos();
+  if(photos.length) out.receipts=photos;
   download(backupName(),JSON.stringify(out),"application/json");
   const d=load(); d.settings.lastBackup=iso(new Date()); save();
+  if(photos.length) toast("Backup saved with "+photos.length+(photos.length===1?" receipt photo":" receipt photos"));
+}
+async function restorePhotos(list){
+  if(!Array.isArray(list) || !list.length) return 0;
+  let n=0;
+  for(const x of list){
+    try{
+      if(!x || !x.id || typeof x.data!=="string") continue;
+      const blob=await dataToBlob(x.data);
+      await rcPut({id:x.id, blob, type:x.type||blob.type||"image/jpeg", ds:x.ds, t:x.t||Date.now()});
+      n++;
+    }catch(e){}
+  }
+  try{ await rcSync(false); }catch(e){}
+  return n;
 }
 function backupEvery(){
   const v=load().settings.backupWeeks;
@@ -3725,6 +3786,35 @@ function offerBackup(){
   else { const d=load(); d.settings.backupAsked=iso(new Date()); save(); }
 }
 
+/* ---- check for updates (v1.1) ----
+   the service worker serves the cached copy first, and iOS home-screen apps
+   are slow to notice a new one, so an upload can sit unseen for days. this
+   does by hand what removing and re-adding the icon does, without touching
+   the hours or the receipts: drop the app's cached files, unregister the
+   worker, fetch the page fresh past every cache, and reload. the next open
+   registers a new worker from whatever is live. */
+async function checkForUpdates(){
+  const btn=document.getElementById("updBtn"), msg=document.getElementById("updMsg");
+  const say=t=>{ if(msg) msg.textContent=t; };
+  if(btn) btn.disabled=true;
+  say("Checking\u2026");
+  try{
+    if(!navigator.onLine){ say("No signal \u2014 try again when you have some."); if(btn) btn.disabled=false; return; }
+    /* make sure the server is reachable before throwing the offline copy away */
+    const r=await fetch("./index.html?fresh="+Date.now(),{cache:"reload"});
+    if(!r.ok) throw new Error("server said "+r.status);
+    const txt=await r.text();
+    const m=txt.match(/const BUILD="([^"]+)"/);
+    const live=m?m[1]:null;
+    if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.filter(k=>/^hourbook-/.test(k)).map(k=>caches.delete(k))); }
+    if(navigator.serviceWorker){ const regs=await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(g=>g.unregister())); }
+    say(live && live!==BUILD ? "Updating to "+live+"\u2026" : "You are on the latest ("+BUILD+"). Refreshing\u2026");
+    setTimeout(()=>location.replace(location.pathname+"?u="+Date.now()),600);
+  }catch(e){
+    say("Could not reach the site just now. Nothing was changed \u2014 try again with signal.");
+    if(btn) btn.disabled=false;
+  }
+}
 function download(name,text,type){
   const b=new Blob([text],{type:type||"text/plain"}), u=URL.createObjectURL(b);
   const a=document.createElement("a"); a.href=u; a.download=name; document.body.appendChild(a); a.click();
@@ -3752,13 +3842,24 @@ function buildOtMode(el){
     </div>`:""}
     <p class="note">${mode==="day"
       ? "Each weekday stands on its own. There is no weekly threshold at all, so the threshold below is ignored. Holiday and bank holiday hours are paid at the basic rate and never become overtime."
-      : "Weekday, bank holiday and holiday hours go into one pool. Everything past the threshold below is overtime."}</p>`;
+      : "Weekday, bank holiday and holiday hours go into one pool. Everything past the threshold below is overtime."}</p>
+    <div class="field">
+      <label>How your hours are rounded<span class="hint">the rule your payroll uses on worked time</span></label>
+      <select id="roundSel">${ROUND_OPTS.map(o=>`<option value="${o[0]}"${o[0]===roundKeyNow()?" selected":""}>${o[1]}</option>`).join("")}</select>
+    </div>`;
   el.querySelector("#otModeSel").addEventListener("change",e=>{
     const v=e.target.value==="day"?"day":"week";
     if(v==="day" && !confirm("Overtime by the day is a different pay rule, not a different rate.\n\nIt will change what every week is worth, including weeks already paid, unless you close off the old rates first with \u201cMy pay has changed\u201d.\n\nSwitch anyway?")){
       e.target.value=SMODE_NOW(); return;
     }
     d.settings.otMode=v; save(); render();
+  });
+  el.querySelector("#roundSel").addEventListener("change",e=>{
+    const [st,dir]=String(e.target.value).split(":");
+    if(!confirm("Rounding is a pay rule. Changing it changes what every week is worth, including weeks already paid, unless you close off the old rates first with \u201cMy pay has changed\u201d.\n\nChange it anyway?")){
+      e.target.value=roundKeyNow(); return;
+    }
+    d.settings.roundTo=Number(st); d.settings.roundDir=dir||"near"; save(); render();
   });
   const din=el.querySelector("#otDayIn");
   if(din) din.addEventListener("change",e=>{
@@ -3768,6 +3869,21 @@ function buildOtMode(el){
   });
 }
 
+/* rounding choices, stored as step-in-minutes and direction */
+const ROUND_OPTS=[
+  ["15:near","Nearest quarter hour"],
+  ["15:down","Down to the quarter hour"],
+  ["15:up","Up to the quarter hour"],
+  ["30:near","Nearest half hour"],
+  ["10:near","Nearest 10 minutes"],
+  ["5:near","Nearest 5 minutes"],
+  ["1:near","No rounding \u2014 to the minute"]
+];
+function roundKeyNow(){
+  const st=roundStepAt(null), dir=st<=1?"near":roundDirAt(null);
+  const k=(st<=1?1:st)+":"+dir;
+  return ROUND_OPTS.some(o=>o[0]===k)?k:"15:near";
+}
 /* a one-line description of an era, enough to recognise it by */
 function eraSummary(r){
   const g=k=>(r[k]===undefined||r[k]===null||r[k]==="")?DEFAULTS[k]:r[k];
@@ -4178,6 +4294,8 @@ function renderSetup(){
   build(SETUP_DED,document.getElementById("setDed"));
   buildMapSetup();
   const og=document.getElementById("haOrigin"); if(og) og.textContent=location.origin;
+  const ub=document.getElementById("updBtn");
+  if(ub && !ub.dataset.wired){ ub.dataset.wired="1"; ub.addEventListener("click",checkForUpdates); }
   document.getElementById("verNote").textContent =
     "Build "+BUILD+". "+
     (memOnly?"Storage is blocked here, so nothing will survive a reload — it will work once it is on your phone. ":"")+
@@ -4432,8 +4550,9 @@ function openDoor(k){ door=k; render(); window.scrollTo(0,0); }
    photos live in their own IndexedDB store, never in the hours. an expense
    that has one carries its id as `rid`; nothing that works out pay reads it.
    capped at RC_CAP — the oldest goes when a new one comes in — so the photos
-   can never grow into the reason Safari clears the site's storage. they are
-   not in the backup file, which stays small and text-only. */
+   can never grow into the reason Safari clears the site's storage. since
+   v1.1 they go into the backup file too (see doBackup), so a restore brings
+   them back. */
 const RC_DB="hourbook-receipts", RC_STORE="r", RC_CAP=25;
 let rcDbP=null, rcIds=new Set(), rcReady=false, rcCount=0, rcPending=null, rcShown=null, rcUrl=null;
 function rcDb(){
@@ -4702,7 +4821,7 @@ document.getElementById("copyCsv").addEventListener("click",async e=>{
   catch(err){ e.target.textContent="Could not copy — use the download"; }
   setTimeout(()=>{ e.target.textContent="Copy CSV to clipboard"; },1800);
 });
-document.getElementById("expJson").addEventListener("click",()=>{ doBackup(); render(); });
+document.getElementById("expJson").addEventListener("click",()=>{ doBackup().then(render); });
 document.getElementById("bkEvery").addEventListener("change",e=>{
   const d=load(); d.settings.backupWeeks=Number(e.target.value); save(); renderBackup();
 });
@@ -4729,8 +4848,13 @@ document.getElementById("fileIn").addEventListener("change",e=>{
       if(!incS.ratesFrozen && Object.keys(incS).length) freezeLegacy(incS);
       mem.settings=Object.assign(mem.settings,incS);
       save(); render();
-      alert("Restored "+keys.length+(keys.length===1?" day":" days")+
-        " and "+Object.keys(incWeeks).length+" week"+(Object.keys(incWeeks).length===1?"":"s")+".");
+      const wkN=Object.keys(incWeeks).length;
+      restorePhotos(inc.receipts).then(ph=>{
+        render();
+        alert("Restored "+keys.length+(keys.length===1?" day":" days")+
+          " and "+wkN+" week"+(wkN===1?"":"s")+
+          (ph?" and "+ph+(ph===1?" receipt photo":" receipt photos"):"")+".");
+      });
     }catch(err){ alert("That file would not open. Pick the backup .json."); }
   };
   fr.readAsText(f);
