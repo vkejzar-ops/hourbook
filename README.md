@@ -28,7 +28,7 @@ This file exists so a future conversation can pick the project up cold.
 **must be bumped together on every change.** The build number is shown in
 Settings → About.
 
-Current version: **v1.2**. The internal counter reached v38.1 and was then
+Current version: **v1.3**. The internal counter reached v38.1 and was then
 renumbered to **v1.0** for the public release — "38 is crazy". Going backwards
 is safe: phones compare the cache *name*, not the number, so `hourbook-v1.0`
 is simply a different cache from `hourbook-v38`. **From v1.0 on, bump by 0.1
@@ -860,6 +860,15 @@ Tax, NI, pension and student loan are deliberately *not* era-aware. They are
 statutory, they already move with the tax year, and the real figures come off
 the slip. Changing jobs mid-year is a P45 matter and the app does not try to
 model it.
+
+## v1.3
+
+- **Split rest opens the 15-hour finish:** while clocked in, ticking split
+  shows the 15-hour latest finish (labelled "split rest") even when all three
+  reduced rests are used — a 3h + 9h split never uses a reduction.
+- **Split rest opens the 9-hour start too:** the next day's earliest start
+  shows 9h after the finish (labelled "split rest") when the shift before was
+  ticked split, even with no reduced rests left.
 
 ## v1.2 (was built as v1.1; renumbered because a v1.1 was already uploaded)
 

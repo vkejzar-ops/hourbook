@@ -1007,7 +1007,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v1.2";
+const BUILD="v1.3";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -2703,10 +2703,13 @@ function renderDay(c){
         const tm=ms=>{ const dt=new Date(ms);
           const t=String(dt.getHours()).padStart(2,"0")+":"+String(dt.getMinutes()).padStart(2,"0");
           return iso(dt)===curDay ? t : t+"<small>"+SHORTDAY[dowIndex(iso(dt))]+"</small>"; };
-        const redOk = avail>=9*60 && nineLeft;
+        /* v1.3: a split (3h taken during the last shift) only ever needs the 9,
+           and never uses a reduction, so it stays open with none left */
+        const wasSplit=!!pr.split;
+        const redOk = avail>=9*60 && (nineLeft || wasSplit);
         const fullOk = avail>=11*60;
         startRow=`<span class="hr">
-          <span class="hc${redOk?"":" off"}"><b>${avail>=9*60?tm(en+9*3600000):"\u2014"}</b><span>${nineLeft?"reduced rest":"no reduced left"}</span></span>
+          <span class="hc${redOk?"":" off"}"><b>${avail>=9*60?tm(en+9*3600000):"\u2014"}</b><span>${wasSplit?"split rest":nineLeft?"reduced rest":"no reduced left"}</span></span>
           <span class="hc${fullOk?"":" off"}"><b>${fullOk?tm(en+11*3600000):"\u2014"}</b><span>full rest</span></span>
         </span>`;
       }
@@ -2715,7 +2718,9 @@ function renderDay(c){
   }
   /* v31: while clocked in, the second row shows the latest he can finish for
      a 13h and a 15h shift, same two-column shape as the start times. the 15h
-     cell only appears if a reduced rest is still available. */
+     cell only appears if a reduced rest is still available — or, since v1.3,
+     whenever the shift is ticked as a split: 3h in the shift + 9h after never
+     uses a reduction, so 15h is always open. */
   let finRow="";
   if(sMs!==null && eMs===null){
     const ft=ms=>{ const dt=new Date(ms);
@@ -2723,7 +2728,8 @@ function renderDay(c){
       return iso(dt)===curDay ? t : t+"<small>"+SHORTDAY[dowIndex(iso(dt))]+"</small>"; };
     finRow=`<span class="hr">
       <span class="hc"><b>${ft(sMs+13*3600000)}</b><span>13-hour finish</span></span>
-      ${nineLeft?`<span class="hc"><b>${ft(sMs+15*3600000)}</b><span>15-hour finish</span></span>`:""}
+      ${r.split?`<span class="hc"><b>${ft(sMs+15*3600000)}</b><span>split rest</span></span>`
+        :nineLeft?`<span class="hc"><b>${ft(sMs+15*3600000)}</b><span>15-hour finish</span></span>`:""}
     </span>`;
   }
   /* v31: once clocked out the second row comes back with what the shift
