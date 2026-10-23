@@ -359,6 +359,24 @@ pre.cfg{background:var(--panel);border:1px solid var(--rule);border-radius:10px;
   background:var(--panel);color:var(--dim);font-size:13.5px;text-align:center;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tog.on{background:var(--amber);border-color:var(--amber);color:#FFF;font-weight:600}
+/* v1.31: the status button and its pills */
+.toggles{position:relative}
+.toggles.popped{z-index:31}
+.tog.stb{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.tog.stb small{font-size:10px;opacity:.6;margin-left:3px}
+.stshade{position:fixed;inset:0;background:rgba(0,0,0,.18);z-index:30}
+.stpop{position:absolute;right:0;bottom:calc(100% - 4px);width:calc(50% - 3.5px);display:flex;flex-direction:column;gap:7px;
+  padding:8px;background:var(--panel);border:1px solid var(--rule);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:32}
+.stpl{height:var(--tap);border-radius:999px;border:1px solid var(--rule);background:var(--panel);font-size:14px;color:var(--text)}
+.stpl.on{background:var(--amber);border-color:var(--amber);color:#FFF;font-weight:600}
+.stpl:disabled{color:var(--rule);border-style:dashed}
+.sthint{font-size:11px;color:var(--dim);text-align:center}
+.hpill .hw{display:block;text-align:left;font-size:13px;line-height:1.35;color:var(--text);margin-top:9px;padding-top:9px;border-top:1px solid var(--rule)}
+.hpill .hw + .hw{margin-top:4px;padding-top:0;border-top:0}
+.hpill .hw.warn{color:var(--amber)}
+.hpill .hw.over{color:var(--red)}
+.hpill .hw b{font-weight:600}
+.hpill .hw b small,.hpill .hw small{font-size:11px;margin-left:2px}
 .tog:disabled{opacity:1;color:var(--rule);background:var(--ground);border-style:dashed}
 .cgrid .cell:disabled{cursor:default}
 .cgrid .cell:not(:disabled):active{background:var(--panel-2)}
@@ -1007,7 +1025,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v1.3";
+const BUILD="v1.31";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -1433,6 +1451,140 @@ function weeklyRestOf(k){
     if(m!==null && m>best) best=m;
   }
   return best;
+}
+
+/* ============ v1.31: day status runs ============
+   one button on the day screen marks why he is not working: weekly rest
+   (a single tap), or held down, holiday, sick or unpaid. whatever he picks
+   carries on through the following days, future ones too, until he clocks in
+   or changes it. a weekly rest is marked on the day he clocks out, and runs
+   from that clock-out.
+   stored as rec.st on each day of the run (rec.stAuto on the carried ones),
+   and settings.stRun = {kind, from} while it is still running. holiday, sick
+   and unpaid also set the old per-day pay flags, on weekdays that are not
+   bank holidays only, so the pay maths is untouched. */
+const ST_LABEL={wr:"weekly rest",hol:"holiday",sick:"sick",unp:"unpaid"};
+const ST_FLAG={hol:"hol",sick:"sick",unp:"unp"};
+function hasStart(rec){ return parseHHMM((rec||{}).start)!==null; }
+function payDay(ds){ return dowIndex(ds)<5 && !BH.has(ds); }
+function stOf(ds){ const r=load().days[ds]||{}; return r.st || (r.hol?"hol":r.sick?"sick":r.unp?"unp":""); }
+function stStrip(rec){
+  if(rec.st && ST_FLAG[rec.st]) delete rec[ST_FLAG[rec.st]];
+  delete rec.st; delete rec.stAuto;
+}
+function stMark(ds,kind,auto){
+  const d=load(), rec=d.days[ds]||(d.days[ds]={});
+  if(rec.st) stStrip(rec);
+  rec.st=kind; if(auto) rec.stAuto=1;
+  const f=ST_FLAG[kind];
+  if(f && payDay(ds) && !hasStart(rec)) rec[f]=true;
+}
+function stClearFrom(ds){
+  const d=load();
+  for(let i=0;i<120;i++){
+    const day=addDays(ds,i), rec=d.days[day];
+    if(i===0){ if(rec){ stStrip(rec); delete rec.hol; delete rec.sick; delete rec.unp; } continue; }
+    if(!rec) continue;
+    if(hasStart(rec)) break;
+    if(rec.st && !rec.stAuto) break;          // a later run starts here
+    if(rec.stAuto) stStrip(rec);
+  }
+  const run=d.settings.stRun;
+  if(run && run.from<=ds) delete d.settings.stRun;
+}
+function stApply(ds,kind){
+  const d=load();
+  stClearFrom(ds);
+  if(kind){ stMark(ds,kind,false); d.settings.stRun={kind,from:ds}; stFill(); }
+  save();
+}
+/* carry the running status forward to whichever is later, today or the day
+   on screen. stops, and takes back anything carried, once he clocks in. */
+function stFill(){
+  const d=load(), run=d.settings.stRun;
+  if(!run) return false;
+  const far=[iso(new Date()), (typeof curDay==="string"?curDay:"")].sort().pop();
+  let changed=false;
+  for(let i=1;i<=400;i++){
+    const day=addDays(run.from,i);
+    if(day>far) break;
+    const rec=d.days[day]||{};
+    if(hasStart(rec)){
+      delete d.settings.stRun; changed=true;
+      for(let j=0;j<120;j++){ const rj=d.days[addDays(day,j)]; if(rj && rj.stAuto) stStrip(rj); }
+      break;
+    }
+    if(rec.st && !rec.stAuto) break;
+    if(rec.stAuto && rec.st===run.kind) continue;
+    if(!rec.st && (rec.hol||rec.sick||rec.unp)) continue;   // booked by hand: leave it
+    stMark(day,run.kind,true); changed=true;
+  }
+  if(changed) save();
+  return changed;
+}
+
+/* ============ v1.31: when the next weekly rest is due ============
+   Reg 561/2006 art. 8(6): a weekly rest has to START no later than the end
+   of six 24-hour periods from the end of the last weekly rest. In any two
+   consecutive weeks there must be two regular (45h) weekly rests, or one
+   regular and one reduced (24h) — so after a reduced one the next must be
+   regular. A reduction is paid back en bloc, attached to another rest, by the
+   end of the third week after — see weeklyPayback, which (strictly) only
+   counts it as paid inside a single 45h + owed block.
+   The six-day count runs from when the rest ENDED, not from Monday: a 45h
+   break that runs into Monday morning is still a full weekly rest. */
+function lastWeekly(ds){
+  const d=load();
+  for(let i=0;i<35;i++){
+    const day=addDays(ds,-i), ri=restInfo(day);
+    if(ri && ri.gap>=24*60) return {end:startMs(day,d.days[day]), len:ri.gap, day};
+  }
+  return null;
+}
+function wrPlan(shiftDay){
+  const lw=lastWeekly(shiftDay);
+  if(!lw) return null;
+  const owed=[], seen={};
+  for(let i=0;i<=5;i++){
+    const wk=addDays(mondayOf(shiftDay),-7*i), pb=weeklyPayback(wk);
+    if(pb && !pb.paid && !seen[wk]){ seen[wk]=1; owed.push({wk,owed:pb.owed,by:pb.by,late:pb.by<shiftDay}); }
+  }
+  return { lw, deadline: lw.end+144*3600000, mustFull: lw.len<45*60, owed };
+}
+/* the weekly-rest part of the drivers' hours pill, from a clock-out.
+   p/en: the shift and its finish. day: the day on screen. eDaily: when the
+   next shift could start off a daily rest. tm: the time formatter. */
+function wrBlock(p,en,day,eDaily,tm){
+  const wp=wrPlan(p);
+  const marked = stOf(p)==="wr" || stOf(day)==="wr";
+  const required = !!wp && (en>=wp.deadline || eDaily>=wp.deadline);
+  if(!marked && !required){
+    /* not yet — but say so on the last day it can be put off to */
+    if(wp && day>=iso(new Date(wp.deadline-24*3600000)) && en<wp.deadline)
+      return `<span class="hw warn">Weekly rest must start by <b>${tm(wp.deadline)}</b>.</span>`;
+    return "";
+  }
+  const H=3600000;
+  const late=(wp?wp.owed:[]).filter(o=>o.late);
+  const due=(wp?wp.owed:[]).filter(o=>!o.late);
+  const pay=due.reduce((a,o)=>a+o.owed,0);
+  const must=due.filter(o=>o.by<=addDays(iso(new Date(en)),7));
+  const mustPay=must.reduce((a,o)=>a+o.owed,0);
+  const noRed = !!wp && wp.mustFull;
+  const minLen = mustPay ? 45*60+mustPay : noRed ? 45*60 : 24*60;
+  const last = en + (pay ? 45*60+pay : 45*60)*60000;
+  if(iso(new Date(last))<day && !required) return "";       // long over
+  const cells=[];
+  cells.push(`<span class="hc${noRed||mustPay?" off":""}"><b>${tm(en+24*H)}</b><span>${noRed?"reduced \u2014 not allowed":"reduced weekly"}</span></span>`);
+  cells.push(`<span class="hc${mustPay?" off":""}"><b>${tm(en+45*H)}</b><span>full weekly</span></span>`);
+  if(pay) cells.push(`<span class="hc"><b class="${mustPay?"amber":""}">${tm(en+(45*60+pay)*60000)}</b><span>${mustPay?"must pay back "+hm(mustPay):"full + "+hm(pay)+" back"}</span></span>`);
+  let lines="";
+  if(wp && en>wp.deadline) lines+=`<span class="hw over">Weekly rest was due to start by ${tm(wp.deadline)}.</span>`;
+  if(required) lines+=`<span class="hw over">Weekly rest required \u2014 no work before <b>${tm(en+minLen*60000)}</b>.</span>`;
+  else lines+=`<span class="hw">Weekly rest from ${tm(en)}. Earliest start <b>${tm(en+minLen*60000)}</b>.</span>`;
+  if(noRed) lines+=`<span class="hw">Your last weekly rest was reduced, so this one must be a full 45 hours.</span>`;
+  late.forEach(o=>{ lines+=`<span class="hw over">${hm(o.owed)} still owed from w/c ${shortDate(o.wk)} \u2014 was due by ${shortDate(o.by)}.</span>`; });
+  return `<span class="hr">${cells.join("")}</span>${lines}`;
 }
 
 /* ============ driving and working time ============ */
@@ -2495,6 +2647,7 @@ function heroNet(fig,sub,c){
 }
 
 function render(){
+  stFill();
   const c=calc(cur());
   const sun=addDays(cur(),6);
   const T=document.getElementById("wkTitle"), U=document.getElementById("wkSub");
@@ -2664,6 +2817,7 @@ function renderDay(c){
   const rt=REST_TEXT[restTextKey(ri)];
   /* holiday can only be booked on a weekday that is not already a bank holiday */
   const canHol = dowIndex(curDay)<5 && !BH.has(curDay);
+  const dayStat = stOf(curDay);
   const xs=expOf(r);
 
   /* how many reduced rests are already gone, so we know whether the 9 is on */
@@ -2692,6 +2846,9 @@ function renderDay(c){
   const redLeft=Math.max(0,3-redUsed), tenLeft=Math.max(0,2-c.extDrive);
   const pc=(v,lbl,cls)=>`<span class="hc"><b class="${cls||""}">${v}</b><span>${lbl}</span></span>`;
   let startRow="";
+  const tmD=ms=>{ const dt=new Date(ms);
+    const t=String(dt.getHours()).padStart(2,"0")+":"+String(dt.getMinutes()).padStart(2,"0");
+    return iso(dt)===curDay ? t : t+"<small>"+SHORTDAY[dowIndex(iso(dt))]+"</small>"; };
   if(parseHHMM(r.start)===null){
     for(let j=1;j<=21;j++){
       const p=addDays(curDay,-j), pr=d.days[p]||{}, en=endMs(p,pr);
@@ -2699,20 +2856,22 @@ function renderDay(c){
       const ps=startMs(p,pr);
       const avail=Math.round((ps+24*3600000-en)/60000);
       const dayStart=fromIso(curDay).getTime();
+      const tm=tmD;
+      const wasSplit=!!pr.split;
+      const redOk = avail>=9*60 && (nineLeft || wasSplit);
+      const fullOk = avail>=11*60;
+      /* v1.31: weekly rest marked, or due — the weekly times take over */
+      const wb=wrBlock(p,en,curDay,en+(redOk?9:11)*3600000,tm);
+      if(wb && /class="hr"/.test(wb)){ startRow=wb; break; }
       if(en+11*3600000>dayStart){
-        const tm=ms=>{ const dt=new Date(ms);
-          const t=String(dt.getHours()).padStart(2,"0")+":"+String(dt.getMinutes()).padStart(2,"0");
-          return iso(dt)===curDay ? t : t+"<small>"+SHORTDAY[dowIndex(iso(dt))]+"</small>"; };
         /* v1.3: a split (3h taken during the last shift) only ever needs the 9,
            and never uses a reduction, so it stays open with none left */
-        const wasSplit=!!pr.split;
-        const redOk = avail>=9*60 && (nineLeft || wasSplit);
-        const fullOk = avail>=11*60;
         startRow=`<span class="hr">
           <span class="hc${redOk?"":" off"}"><b>${avail>=9*60?tm(en+9*3600000):"\u2014"}</b><span>${wasSplit?"split rest":nineLeft?"reduced rest":"no reduced left"}</span></span>
           <span class="hc${fullOk?"":" off"}"><b>${fullOk?tm(en+11*3600000):"\u2014"}</b><span>full rest</span></span>
         </span>`;
       }
+      startRow+=wb;         /* "weekly rest must start by" on the last day */
       break;
     }
   }
@@ -2726,6 +2885,15 @@ function renderDay(c){
     const ft=ms=>{ const dt=new Date(ms);
       const t=String(dt.getHours()).padStart(2,"0")+":"+String(dt.getMinutes()).padStart(2,"0");
       return iso(dt)===curDay ? t : t+"<small>"+SHORTDAY[dowIndex(iso(dt))]+"</small>"; };
+    /* v1.31: the last shift before a weekly rest is due — one plain line */
+    const wpF=wrPlan(curDay);
+    if(wpF && sMs>=wpF.deadline-24*3600000){
+      const cap = sMs+((r.split||nineLeft)?15:13)*3600000;
+      const latest = Math.min(cap, wpF.deadline);
+      finRow = latest<=sMs
+        ? `<span class="hw over">Weekly rest was due to start by ${ft(wpF.deadline)}.</span>`
+        : `<span class="hw warn">Latest finish <b>${ft(latest)}</b>. Weekly rest required.</span>`;
+    }else
     finRow=`<span class="hr">
       <span class="hc"><b>${ft(sMs+13*3600000)}</b><span>13-hour finish</span></span>
       ${r.split?`<span class="hc"><b>${ft(sMs+15*3600000)}</b><span>split rest</span></span>`
@@ -2741,6 +2909,13 @@ function renderDay(c){
       ${dedM?`<span class="hc"><b>${hm(Math.max(0,worked-dedM))}</b><span>paid</span></span>`:""}
       <span class="hc"><b class="amber">${hm(c.workedMins)}</b><span>this week</span></span>
     </span>`;
+    /* v1.31: clocked out — if he has marked a weekly rest, or one is due,
+       show when he can start after it */
+    if(eMs!==null){
+      const avail=Math.round((sMs+24*3600000-eMs)/60000);
+      const redOk = avail>=9*60 && (r.split || redUsed<3);
+      totRow+=wrBlock(curDay,eMs,curDay,eMs+(redOk?9:11)*3600000,tmD);
+    }
   }
   const pill=`<button class="hpill" id="hPill" aria-label="Drivers' hours">
     <span class="hr">
@@ -2795,9 +2970,7 @@ function renderDay(c){
 
     <div class="toggles">
       <button class="tog nt${r.night?" on":""}"${r.sick?" disabled":""} aria-pressed="${r.night?"true":"false"}">night out</button>
-      ${canHol?`<button class="tog hol${r.hol?" on":""}"${worked||r.sick||r.unp?" disabled":""} aria-pressed="${r.hol?"true":"false"}">holiday</button>
-      <button class="tog sk${r.sick?" on":""}"${worked||r.hol||r.unp?" disabled":""} aria-pressed="${r.sick?"true":"false"}">sick</button>
-      <button class="tog up${r.unp?" on":""}"${worked||r.hol||r.sick?" disabled":""} aria-pressed="${r.unp?"true":"false"}">unpaid</button>`:""}
+      <button class="tog stb${dayStat?" on":""}" aria-pressed="${dayStat?"true":"false"}" aria-haspopup="true">${dayStat?ST_LABEL[dayStat]:"weekly rest"} <small>hold &#9652;</small></button>
     </div>
 
     <div class="expb">
@@ -2897,12 +3070,34 @@ function renderDay(c){
   box.querySelector(".nt").addEventListener("click",()=>set("night",r.night?"":true));
   const splBtn=box.querySelector(".spl");
   if(splBtn) splBtn.addEventListener("click",()=>set("split",r.split?"":true));
-  const holBtn=box.querySelector(".hol");
-  if(holBtn) holBtn.addEventListener("click",()=>set("hol",r.hol?"":true));
-  const skBtn=box.querySelector(".sk");
-  if(skBtn) skBtn.addEventListener("click",()=>set("sick",r.sick?"":true));
-  const upBtn=box.querySelector(".up");
-  if(upBtn) upBtn.addEventListener("click",()=>set("unp",r.unp?"":true));
+  /* v1.31: one tap = weekly rest (or clears whatever is on); hold = the
+     four choices as stacked pills */
+  const sb=box.querySelector(".stb");
+  if(sb){
+    let tmr=null, held=false;
+    const openPop=()=>{
+      held=true;
+      const tg=sb.parentNode;
+      const shade=document.createElement("div"); shade.className="stshade";
+      const pop=document.createElement("div"); pop.className="stpop";
+      pop.innerHTML=["wr","hol","sick","unp"].map(k=>
+        `<button class="stpl${dayStat===k?" on":""}" data-k="${k}"${k!=="wr"&&hasStart(r)?" disabled":""}>${ST_LABEL[k]}</button>`).join("")+
+        `<span class="sthint">carries on until you clock in</span>`;
+      const close=()=>{ shade.remove(); pop.remove(); tg.classList.remove("popped"); };
+      shade.addEventListener("click",close);
+      pop.querySelectorAll(".stpl").forEach(b=>b.addEventListener("click",()=>{
+        const k=b.dataset.k; close(); stApply(curDay, k===dayStat?"":k); render();
+      }));
+      document.body.appendChild(shade); tg.appendChild(pop); tg.classList.add("popped");
+    };
+    sb.addEventListener("pointerdown",()=>{ held=false; clearTimeout(tmr); tmr=setTimeout(openPop,450); });
+    ["pointerup","pointerleave","pointercancel"].forEach(ev=>sb.addEventListener(ev,()=>clearTimeout(tmr)));
+    sb.addEventListener("contextmenu",e=>e.preventDefault());
+    sb.addEventListener("click",()=>{
+      if(held){ held=false; return; }
+      stApply(curDay, dayStat?"":"wr"); render();
+    });
+  }
 
   const noteEl=box.querySelector("#dayNote");
   if(noteEl) noteEl.addEventListener("input",e=>{

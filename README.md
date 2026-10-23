@@ -28,7 +28,7 @@ This file exists so a future conversation can pick the project up cold.
 **must be bumped together on every change.** The build number is shown in
 Settings → About.
 
-Current version: **v1.3**. The internal counter reached v38.1 and was then
+Current version: **v1.31**. The internal counter reached v38.1 and was then
 renumbered to **v1.0** for the public release — "38 is crazy". Going backwards
 is safe: phones compare the cache *name*, not the number, so `hourbook-v1.0`
 is simply a different cache from `hourbook-v38`. **From v1.0 on, bump by 0.1
@@ -860,6 +860,25 @@ Tax, NI, pension and student loan are deliberately *not* era-aware. They are
 statutory, they already move with the tax year, and the real figures come off
 the slip. Changing jobs mid-year is a P45 matter and the app does not try to
 model it.
+
+## v1.31
+
+- **One status button** next to night out. A tap marks a weekly rest; held
+  down it opens four stacked pills: weekly rest, holiday, sick, unpaid. The
+  choice carries on through the following days (future ones too) until he
+  clocks in or changes it (`rec.st`, `rec.stAuto`, `settings.stRun`). Holiday,
+  sick and unpaid still set the old per-day pay flags, on non-bank-holiday
+  weekdays only, so pay is unchanged. A weekly rest is tapped on the day he
+  clocks out and runs from that clock-out.
+- **Weekly rest due** (`lastWeekly`, `wrPlan`, `wrBlock`): the six 24-hour
+  periods are counted from the end of the last weekly rest (any break of 24h+),
+  not from Monday. On the shift that starts in the last 24 hours the finish row
+  reads "Latest finish HH:MM. Weekly rest required." (capped by the deadline).
+  On the last day a reminder says when it must start; once the next daily-rest
+  start would fall past the deadline, it says weekly rest required and when he
+  can work again. After a reduced weekly rest the next must be a full 45h;
+  any payback owed is offered as 45h + owed, and made compulsory when its
+  deadline falls before the next chance.
 
 ## v1.3
 
