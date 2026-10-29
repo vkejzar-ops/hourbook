@@ -609,6 +609,8 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
 .owetag{font-style:normal;color:var(--amber);font-weight:600;margin-left:4px}
 .strip{margin-top:8px;padding:8px 0 2px 11px;border-left:2px solid var(--amber)}
 .strip.done{border-left-color:var(--green)}
+.strip.woff{border-left-color:var(--dim)}
+.strip.woff .sh{color:var(--dim)}
 .strip.miss{border-left-color:var(--red)}
 .strip.over{border-left-color:var(--rule)}
 .strip .sl{display:flex;align-items:center;gap:8px}
@@ -1033,7 +1035,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v1.32";
+const BUILD="v1.33";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -3573,6 +3575,23 @@ function renderPayslip(c){
 
     /* ---- the carry-over strip ---- */
     const unitTxt = n => unit==="h" ? n2(n)+" h" : (unit==="yn"||unit==="\u00a3") ? money(n) : String(n);
+    /* a write-off has to be reversible — one stray tap otherwise drops a
+       carried shortfall for good and the slip that pays it reads as "over". */
+    if(wroteOff && cin.owed>0){
+      const su=document.createElement("div");
+      su.className="strip woff";
+      su.innerHTML=`<div class="sl"><span class="sh">${unitTxt(cin.owed)}</span><span class="sd">from ${prettyDate(cin.from||k)} — <b>written off</b></span></div><div class="stot">no longer expected on this slip or carried on</div>`;
+      const bar=document.createElement("div"); bar.className="oact";
+      const bu=document.createElement("button");
+      bu.className="wo full"; bu.textContent="undo write-off";
+      bu.addEventListener("click",()=>{
+        const w=pslot(k,true);
+        if(w.wo){ delete w.wo[key]; if(!Object.keys(w.wo).length) delete w.wo; }
+        save(); render();
+      });
+      bar.appendChild(bu); su.appendChild(bar);
+      row.appendChild(su);
+    }
     const taken = locked ? 0 : plTaken(key,unit,raw,exp,cin);
     const backTxt = taken>0 ? unitTxt(taken)+" of it is the overpayment on your "+prettyDate(payOf(pprev(k)))+" slip being taken back" : "";
     if(!locked && (owed>0 || cout.owed>0 || cout.credit>0 || taken>0)){
