@@ -621,6 +621,13 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
 .stot{font-size:12.5px;color:var(--dim);margin-top:5px;line-height:1.45}
 .stot b{color:var(--text);font-weight:600}
 .oact{display:flex;gap:8px;margin-top:8px}
+/* v1.32 carried-over row in the payslip totals */
+#plTot .lrow.carr .d{color:var(--amber);font-size:12.5px;padding-left:6px}
+#plTot .lrow.carr .u{color:var(--amber)}
+/* v1.32 weekly rest payback */
+.paybk .stat.tot .name{font-weight:600}
+.paybk .zb{margin-top:8px;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--red);
+  background:none;border:1px solid var(--red);border-radius:6px;padding:5px 10px;font-family:inherit}
 .wo{font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);
   border:1px solid var(--rule);border-radius:7px;padding:5px 9px;margin-left:auto;background:var(--ground)}
 .wo.full{margin-left:0;color:var(--amber);border-color:var(--amber)}
@@ -778,6 +785,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
     <button class="linkrow backrow" id="backDay">&lsaquo; Today</button>
     <h2>This week</h2>
     <div id="dhWeek"></div>
+    <div id="dhPay"></div>
     <h2>Rest</h2>
     <div id="dhRest"></div>
     <h2>Working time</h2>
@@ -1025,7 +1033,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v1.31";
+const BUILD="v1.32";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -1348,18 +1356,62 @@ function restTextKey(info){
    the test here is the strict one: a single break of a full 45 hours plus what
    is owed. That can say he still owes when he does not, which is the safe way
    round for something he may have to stand behind at a roadside check. */
-function weeklyPayback(k){
-  const taken=weeklyRestOf(k);
-  if(!(taken>=24*60 && taken<45*60)) return null;
-  const owed=45*60-taken, need=45*60+owed, by=addDays(k,27);
-  for(let i=7;i<=27;i++){
-    const day=addDays(k,i);
-    const m=restInfo(day);
-    if(m && m.gap>=need) return {owed, by, paid:true, on:day, block:m.gap};
-  }
-  return {owed, by, paid:false};
-}
+/* v1.32: weekly rests are found as EVENTS — every break of 24 hours or more
+   between one clock-out and the next clock-in, measured in real time (so a
+   clock change inside the break is counted properly). A rest belongs to the
+   week its clock-out falls in. The old way took the longest break touching
+   each Monday-to-Monday window, which let a full rest the weekend before hide
+   a reduced one, and let a full rest the weekend after wipe a debt out.
 
+   A reduced one (24h to under 45h) owes the difference, paid en bloc by the
+   end of the third week after the week it started in. As before, the test for
+   paid is the strict one: a later single break of a full 45 hours plus what
+   is owed. One long break can pay off several debts at once, oldest first,
+   each one only if what is left of the extra covers it whole. */
+function weeklyRests(){
+  const d=load(), keys=Object.keys(d.days).sort(), out=[];
+  let last=null;                                   // {day, e}
+  keys.forEach(k=>{
+    const r=d.days[k]||{}, st=startMs(k,r), en=endMs(k,r);
+    if(st===null) return;
+    if(last && st>last.e){
+      const len=Math.round((st-last.e)/60000);
+      if(len>=24*60) out.push({from:last.day, to:k, start:last.e, end:st, len, wk:mondayOf(last.day)});
+    }
+    if(en!==null) last={day:k, e:en};
+  });
+  return out;
+}
+const wrDeadlineMs = by => fromIso(addDays(by,1)).getTime();   // end of that Sunday
+function wrDebts(){
+  const zero=load().settings.wrZero||{}, debts=[];
+  weeklyRests().forEach(r=>{
+    if(r.len>=45*60){
+      let extra=r.len-45*60;
+      debts.forEach(x=>{
+        if(x.paid || x.zeroed || !(extra>=x.owed)) return;
+        x.paid=true; x.on=r.from; x.payStart=r.start; x.block=r.len;
+        x.paidLate = r.end > wrDeadlineMs(x.by);
+        extra-=x.owed;
+      });
+    }else{
+      debts.push({id:r.from, from:r.from, to:r.to, start:r.start, wk:r.wk, taken:r.len,
+                  owed:45*60-r.len, by:addDays(r.wk,27), paid:false, zeroed:!!zero[r.from]});
+    }
+  });
+  return debts;
+}
+/* what is still owed at a moment: the rest has started, it has not been paid
+   by a break that started before then, and he has not zeroed it */
+function wrOwedAt(ms, debts){
+  return (debts||wrDebts()).filter(x=>x.start<ms && !x.zeroed && !(x.paid && x.payStart<ms));
+}
+/* the weekly rest that started in week k, the longest if more than one */
+function wrOfWeek(k){
+  let best=null;
+  weeklyRests().forEach(r=>{ if(r.wk===k && (!best || r.len>best.len)) best=r; });
+  return best;
+}
 
 /* how many reduced daily rests have been used since the last weekly rest,
    counting backwards from and including the given day */
@@ -1426,30 +1478,10 @@ function restFlags(ds){
   return out;
 }
 
-/* the longest break touching this week, worked out from the clock */
-/* v38: every reduced weekly rest from an EARLIER week whose payback is still
-   unpaid and still inside its deadline, as at the Sunday of the week being
-   viewed. Independent of this week's own rest — a full rest this week does not
-   clear an older debt, and an older debt does not make this week reduced. */
-function owedCarry(upto){
-  const out=[];
-  for(let i=1;i<=5;i++){                 // look back up to 5 weeks
-    const wk=addDays(mondayOf(upto),-7*i);
-    const pb=weeklyPayback(wk);
-    if(pb && !pb.paid && pb.by>=upto){    // still owed, not yet past its deadline
-      out.push({wk, owed:pb.owed, by:pb.by, late:false});
-    }else if(pb && !pb.paid && pb.by<upto){
-      out.push({wk, owed:pb.owed, by:pb.by, late:true});
-    }
-  }
-  return out;
-}
-function weeklyRestOf(k){
+/* the longest daily break that ended in this week, for the "no weekly rest yet" note */
+function longestBreakIn(k){
   let best=0;
-  for(let i=0;i<8;i++){                 // 8 covers the gap after Sunday's shift
-    const m=restBefore(addDays(k,i));
-    if(m!==null && m>best) best=m;
-  }
+  for(let i=0;i<7;i++){ const m=restBefore(addDays(k,i)); if(m!==null && m<24*60 && m>best) best=m; }
   return best;
 }
 
@@ -1529,7 +1561,7 @@ function stFill(){
    consecutive weeks there must be two regular (45h) weekly rests, or one
    regular and one reduced (24h) — so after a reduced one the next must be
    regular. A reduction is paid back en bloc, attached to another rest, by the
-   end of the third week after — see weeklyPayback, which (strictly) only
+   end of the third week after — see wrDebts, which (strictly) only
    counts it as paid inside a single 45h + owed block.
    The six-day count runs from when the rest ENDED, not from Monday: a 45h
    break that runs into Monday morning is still a full weekly rest. */
@@ -1544,11 +1576,9 @@ function lastWeekly(ds){
 function wrPlan(shiftDay){
   const lw=lastWeekly(shiftDay);
   if(!lw) return null;
-  const owed=[], seen={};
-  for(let i=0;i<=5;i++){
-    const wk=addDays(mondayOf(shiftDay),-7*i), pb=weeklyPayback(wk);
-    if(pb && !pb.paid && !seen[wk]){ seen[wk]=1; owed.push({wk,owed:pb.owed,by:pb.by,late:pb.by<shiftDay}); }
-  }
+  const r=load().days[shiftDay]||{}, en=endMs(shiftDay,r);
+  const at = en!==null ? en : fromIso(addDays(shiftDay,1)).getTime();
+  const owed=wrOwedAt(at).map(x=>({wk:x.wk, owed:x.owed, by:x.by, late:x.by<shiftDay}));
   return { lw, deadline: lw.end+144*3600000, mustFull: lw.len<45*60, owed };
 }
 /* the weekly-rest part of the drivers' hours pill, from a clock-out.
@@ -1996,19 +2026,34 @@ function plGapSource(k,c){
   return out.length===1 ? out[0].label.toLowerCase()
     : out[0].label.toLowerCase()+" and "+(out.length-1)+" more";
 }
+/* v1.32: what is carried INTO this period as still owed, line by line, priced
+   at this period's rates (the same rates the slip side is priced at, so the
+   two sides compare like for like). attendance is left out — it has its own
+   "paid twice" route and is never carried as a line figure. */
+function plCarryOf(k){
+  const cin=plCarryIn(k), wo=pslot(k).wo||{}, out={};
+  plLines(k).forEach(([key,,unit,rateKey])=>{
+    const ci=cin[key]||{}, o=ci.owed||0;
+    if(!(o>0) || wo[key] || unit==="yn") return;
+    const cash = unit==="h" ? o*S(rateKey,pAt(k)) : unit==="n" ? o*nightRate(pAt(k)) : o;
+    out[key]={units:(unit==="h"||unit==="n")?o:0, cash, from:ci.from||null};
+  });
+  return out;
+}
 function plTotals(k,c){
-  const p=plSaved(k), e=plExpected(k,c);
-  let expH=0, slipH=0, expPay=0, slipPay=0;
+  const p=plSaved(k), e=plExpected(k,c), car=plCarryOf(k);
+  let expH=0, slipH=0, expPay=0, slipPay=0, carH=0, carPay=0;
   plLines(k).forEach(([key,,unit])=>{
-    const raw=num(p[key]);
-    const theirs = raw===null ? e[key].cash : plActualCash(key,raw,k);
-    expPay+=e[key].cash; slipPay+=theirs;
+    const raw=num(p[key]), cr=car[key]||{units:0,cash:0};
+    /* a blank line agrees with what was expected — including anything owed */
+    const theirs = raw===null ? e[key].cash+cr.cash : plActualCash(key,raw,k);
+    expPay+=e[key].cash+cr.cash; slipPay+=theirs; carPay+=cr.cash;
     if(unit==="h"){
-      expH+=e[key].units;
-      slipH+= raw===null ? e[key].units : raw;
+      expH+=e[key].units+cr.units; carH+=cr.units;
+      slipH+= raw===null ? e[key].units+cr.units : raw;
     }
   });
-  return {expH, slipH, expPay, slipPay};
+  return {expH, slipH, expPay, slipPay, carH, carPay};
 }
 
 /* ============ the carry-over ledger ============
@@ -2757,7 +2802,14 @@ function render(){
     /* an unpaid week has no slip to be "expected" against — say predicted */
     const pw=plLocked(plCur())?"predicted":"expected";
     fig.className="fig one";
-    fig.innerHTML="<span class=\"n\">"+money2(pc.net)+"</span>";
+    /* v1.32: anything carried over from an earlier slip is part of what to expect */
+    let heroNet=pc.net;
+    if(t.carPay>0.005){
+      const k0=plCur(), e0=plExpected(k0,pc), car=plCarryOf(k0), m0={};
+      plLines(k0).forEach(([key])=>{ m0[key]=e0[key].cash+((car[key]||{}).cash||0); });
+      heroNet=plMoney(k0,m0,!plLocked(k0)).net;
+    }
+    fig.innerHTML="<span class=\"n\">"+money2(heroNet)+"</span>";
     const pEst=document.getElementById("heroEst");
     if(pEst){ pEst.style.display=""; pEst.textContent="estimate"; }
     const bk=plHasAny(plCur()) ? plBack(plCur(),pc) : {h:0,p:0}, gap2=gap+bk.p;
@@ -2769,11 +2821,12 @@ function render(){
         (plGapSource(plCur(),pc) ? " · "+plGapSource(plCur(),pc) : "");
     sub.style.display = sub.textContent ? "" : "none";
     strip.innerHTML= plLocked(plCur())
-      ? "<span class=\"s\"><span class=\"v\">"+n2(t.expH)+"h</span><span class=\"k\">logged</span></span>"+
+      ? "<span class=\"s\"><span class=\"v\">"+n2(t.expH-t.carH)+"h</span><span class=\"k\">logged</span></span>"+
+        (t.carH>0.005?"<span class=\"s\"><span class=\"v\">+"+n2(t.carH)+"h</span><span class=\"k\">carried over</span></span>":"")+
         "<span class=\"s\"><span class=\"v\">"+pc.nights+"</span><span class=\"k\">nights</span></span>"+
         "<span class=\"s\"><span class=\"v\">"+DAYSHORT[dowIndex(payOf(plCur()))]+" "+shortDate(payOf(plCur()))+"</span><span class=\"k\">payday</span></span>"
       :
-      "<span class=\"s\"><span class=\"v\">"+n2(t.expH)+"h"+"</span><span class=\"k\">logged</span></span>"+
+      "<span class=\"s\"><span class=\"v\">"+n2(t.expH)+"h"+"</span><span class=\"k\">"+(t.carH>0.005?"expected":"logged")+"</span></span>"+
       "<span class=\"s\"><span class=\"v\">"+n2(t.slipH)+"h"+"</span><span class=\"k\">on the slip</span></span>"+
       "<span class=\"s\"><span class=\"v\">"+(Math.abs(gh)<0.005?"none":(gh>0?"+":"\u2212")+n2(Math.abs(gh))+"h")+"</span><span class=\"k\">gap</span></span>";
   }else if(tab==="history"){
@@ -2917,6 +2970,16 @@ function renderDay(c){
       totRow+=wrBlock(curDay,eMs,curDay,eMs+(redOk?9:11)*3600000,tmD);
     }
   }
+  /* v1.32: weekly rest still owed back, so it can be seen without digging */
+  let owRow="";
+  { const at=Math.min(Date.now(), fromIso(addDays(curDay,1)).getTime());
+    const ow=wrOwedAt(at);
+    if(ow.length){
+      const tot=ow.reduce((a,x)=>a+x.owed,0);
+      const late=ow.some(x=>at>wrDeadlineMs(x.by));
+      const by=ow.map(x=>x.by).sort()[0];
+      owRow=`<span class="hw ${late?"over":"warn"}"><b>${hm(tot)}</b> weekly rest owed${late?" \u2014 overdue":", by "+prettyDate(by)}.</span>`;
+    } }
   const pill=`<button class="hpill" id="hPill" aria-label="Drivers' hours">
     <span class="hr">
       ${pc(redLeft,"reduced rests left",redLeft?"":"over")}
@@ -2924,7 +2987,7 @@ function renderDay(c){
       ${pc(hm(driveLeft),"driving left",driveLeft<9*60?(driveLeft?"warn":"over"):"")}
       <span class="cv">&rsaquo;</span>
     </span>
-    ${startRow}${finRow}${totRow}
+    ${startRow}${finRow}${totRow}${owRow}
   </button>`;
 
   const sickRate=Number(S("sickRate",curDay))||0;
@@ -3248,6 +3311,38 @@ function stat(name,val,note,frac,forceCls){
     ${note?`<div class="note">${note}</div>`:""}
   </div>`;
 }
+/* v1.32: everything still to pay back, as at the end of the week on screen
+   (or now, if that is sooner). only there when something is owed. one line per
+   reduced rest, the week it came from, how much and by when; a total under
+   them when there is more than one. once a deadline passes it stays, marked
+   overdue, until it is paid or he zeroes it out. */
+function renderPayback(){
+  const box=document.getElementById("dhPay"); if(!box) return;
+  const at=Math.min(Date.now(), fromIso(addDays(cur(),7)).getTime());
+  const list=wrOwedAt(at).sort((a,b)=>a.start-b.start);
+  if(!list.length){ box.innerHTML=""; return; }
+  const span = x => prettyDate(x.from)+" \u2013 "+prettyDate(x.to);
+  let h=`<h2>Weekly rest payback</h2><div class="paybk">`;
+  list.forEach(x=>{
+    const late = at>wrDeadlineMs(x.by);
+    h+=`<div class="stat"><div class="top"><span class="name">From w/c ${shortDate(x.wk)}</span>`
+      +`<span class="val ${late?"over":"warn"}">${hm(x.owed)}${late?" overdue":" owed"}</span></div>`
+      +`<div class="note">${span(x)}: ${hm(x.taken)} taken. `
+      +(late ? `Was due by <b>${prettyDate(x.by)}</b> \u2014 overdue.`
+             : `Pay back by <b>${prettyDate(x.by)}</b> \u2014 one break of ${hm(45*60+x.owed)} clears it.`)
+      +`</div>${late?`<button class="zb" type="button" data-id="${x.id}">Zero it out</button>`:""}</div>`;
+  });
+  if(list.length>1){
+    const tot=list.reduce((a,x)=>a+x.owed,0);
+    h+=`<div class="stat tot"><div class="top"><span class="name">Total owed</span><span class="val warn">${hm(tot)}</span></div>`
+      +`<div class="note">One break of ${hm(45*60+tot)} clears all of it.</div></div>`;
+  }
+  box.innerHTML=h+`</div>`;
+  box.querySelectorAll(".zb").forEach(b=>b.addEventListener("click",()=>{
+    if(!confirm("Zero out this payback? It stops showing as owed. Your tacho record does not change.")) return;
+    const d=load(); d.settings.wrZero=d.settings.wrZero||{}; d.settings.wrZero[b.dataset.id]=1; save(); render();
+  }));
+}
 function renderHours(c){
   const prev=calc(addDays(cur(),-7));
   const fort=c.driveMins+prev.driveMins;
@@ -3259,38 +3354,39 @@ function renderHours(c){
   document.getElementById("dhWeek").innerHTML=dh.join("");
 
   const rest=[];
-  { const sun=addDays(cur(),6); owedCarry(sun).forEach(x=>{
-      rest.push(`<div class="stat">
-        <div class="top"><span class="name">Owed from w/c ${shortDate(x.wk)}</span><span class="val ${x.late?"over":"warn"}">${hm(x.owed)} owed</span></div>
-        <div class="note">${x.late?"Was due by "+shortDate(x.by)+" — overdue.":"Weekly rest still to pay back, by "+shortDate(x.by)+", in one block."}</div></div>`);
-    }); }
+  renderPayback();
   const redUsed=reducedSinceWeekly(addDays(cur(),6));
   rest.push(stat("Reduced daily rests",redUsed+" / 3 used",
     (3-redUsed)>0?(3-redUsed)+" left before your next weekly rest":"none left — 11 hours needed now",redUsed/3));
   if(c.shortRest) rest.push(stat("Rests under 9 hours",c.shortRest+" this week","Worked out from your start and finish times. Check these against the tacho.",1,"over"));
 
-  const wrMins=weeklyRestOf(cur()), pwrMins=weeklyRestOf(addDays(cur(),-7));
-  const isRed = m => m>=24*60 && m<45*60;
+  /* v1.32: the weekly rest that started in this week, as an event */
+  const debts=wrDebts();
+  const wr=wrOfWeek(cur()), pwr=wrOfWeek(addDays(cur(),-7));
+  const isRed = r => !!r && r.len<45*60;
+  const span = r => prettyDate(r.from)+" \u2013 "+prettyDate(r.to);
   let wrVal, wrCls, wrNote, wrOwe="";
-  if(wrMins>=45*60){
-    wrVal=hm(wrMins); wrCls="ok";
-    wrNote="A full weekly rest, worked out from your finish and start times.";
-  }else if(wrMins>=24*60){
-    wrVal=hm(wrMins); wrCls=isRed(pwrMins)?"over":"warn";
-    const pb=weeklyPayback(cur());
-    if(isRed(pwrMins)){
-      wrNote="Reduced two weeks running — that is not allowed. Check it against your tacho.";
-    }else if(pb && pb.paid){
+  if(wr && wr.len>=45*60){
+    wrVal=hm(wr.len); wrCls="ok";
+    wrNote="A full weekly rest, "+span(wr)+".";
+  }else if(wr){
+    wrVal=hm(wr.len); wrCls=isRed(pwr)?"over":"warn";
+    const x=debts.find(y=>y.id===wr.from);
+    if(isRed(pwr)){
+      wrNote="Reduced two weeks running \u2014 that is not allowed. Check it against your tacho.";
+    }else if(x && x.paid){
       wrCls="ok";
-      wrNote=hm(pb.owed)+" was owed — paid back by "+hm(pb.block)+" from "+shortDate(pb.on)+".";
+      wrNote="Reduced, "+span(wr)+". "+hm(x.owed)+" was owed \u2014 paid back in the "+hm(x.block)+" break from "+prettyDate(x.on)+(x.paidLate?", after its deadline.":".");
+    }else if(x && x.zeroed){
+      wrNote="Reduced, "+span(wr)+". "+hm(x.owed)+" was owed \u2014 you zeroed it out.";
     }else{
-      wrVal=hm(45*60-wrMins)+" owed";
-      wrNote=hm(wrMins)+" taken. Pay back in one block, by "+shortDate(addDays(cur(),27))+".";
+      wrNote="Reduced, "+span(wr)+" \u2014 "+hm(45*60-wr.len)+" to pay back. See Weekly rest payback above.";
     }
   }else{
-    wrVal=wrMins?hm(wrMins):"—"; wrCls=wrMins?"warn":"";
-    wrNote=wrMins
-      ? "No weekly rest in this week yet. That is the longest break so far."
+    const lb=longestBreakIn(cur());
+    wrVal=lb?hm(lb):"\u2014"; wrCls=lb?"warn":"";
+    wrNote=lb
+      ? "No weekly rest started in this week yet. That is the longest break so far."
       : "Fills itself in once there are enough start and finish times to find a break.";
   }
   rest.push(`<div class="stat">
@@ -3635,23 +3731,29 @@ function renderPayslip(c){
   const dtxt=g=>Math.abs(g)<0.005?"\u2014":(g>0?"+":"\u2212")+n2(Math.abs(g));
   const mny=v=>(v<-0.005?"\u2212":"")+"\u00a3"+n2(Math.abs(v));
 
+  /* v1.32: carried-over amounts get their own row under their line and count
+     in every total, so the totals say what this slip should actually pay */
+  const car=plCarryOf(k);
+  const cU=key=>(car[key]||{}).units||0, cC=key=>(car[key]||{}).cash||0;
   const mine={}, mineU={}, theirs={}, theirsU={};
   plLines(k).forEach(([key])=>{
     const raw=num(p[key]);
     mine[key]=e[key].cash; mineU[key]=e[key].units;
     if(!conf(key)){ theirs[key]=null; theirsU[key]=null; return; }
-    theirs[key] = raw===null ? e[key].cash : plActualCash(key,raw,k);
-    theirsU[key]= raw===null ? e[key].units : raw;
+    theirs[key] = raw===null ? e[key].cash+cC(key) : plActualCash(key,raw,k);
+    theirsU[key]= raw===null ? e[key].units+cU(key) : raw;
   });
-  /* a line shows if the app expects something on it or he has checked it */
-  const live=([key])=>Math.abs(mine[key])>=0.005 || conf(key);
+  /* a line shows if the app expects something on it, something is carried
+     onto it, or he has checked it */
+  const live=([key])=>Math.abs(mine[key])>=0.005 || cC(key)>=0.005 || conf(key);
   const shownK=plLines(k).filter(live).map(l=>l[0]);
   const allConf = shownK.length>0 && shownK.every(conf);
   const allConfH = plLines(k).filter(l=>l[2]==="h").filter(live).map(l=>l[0]).every(conf);
   /* the deduction chain needs a full set of figures, so unchecked lines fall
      back to what was logged — those rows only ever show once every line is in. */
-  const forMoney={}; plLines(k).forEach(([key])=>{ forMoney[key]= theirs[key]===null?mine[key]:theirs[key]; });
-  const mM=plMoney(k,mine,!locked), mT=plMoney(k,forMoney,!locked);
+  const mineAll={}; plLines(k).forEach(([key])=>{ mineAll[key]=mine[key]+cC(key); });
+  const forMoney={}; plLines(k).forEach(([key])=>{ forMoney[key]= theirs[key]===null?mineAll[key]:theirs[key]; });
+  const mM=plMoney(k,mineAll,!locked), mT=plMoney(k,forMoney,!locked);
 
   const cell=(cls,top,bot)=>`<span class="${cls}">${top}${bot?`<i class="m">${bot}</i>`:""}</span>`;
   const trow=(lbl,a,b,cls,est)=>
@@ -3681,9 +3783,9 @@ function renderPayslip(c){
     if(conf(key)){
       cTop = isU ? fu(theirsU[key]) : mny(theirs[key]);
       cBot = isU ? mny(theirs[key]) : "";
-      const gp = theirs[key]-mine[key];
+      const gp = theirs[key]-mine[key]-cC(key);
       if(isU){
-        const gu = theirsU[key]-mineU[key];
+        const gu = theirsU[key]-mineU[key]-cU(key);
         gTop = dtxt(gu); gc = dcol(gu);
         /* units agreeing while the money does not is not a payroll dispute —
            the money is only units times his own stored rate, so the rate is
@@ -3697,6 +3799,12 @@ function renderPayslip(c){
     }
     ih+=`<div class="lrow"><span class="d">${label}</span>`+cell("u",uTop,uBot)+cell("c",cTop,cBot)+
         `<span class="g" style="color:${gc}">${gTop}${gBot?`<i class="m">${gBot}</i>`:""}</span></div>`;
+    if(cC(key)>=0.005){
+      const cf=car[key].from;
+      ih+=`<div class="lrow carr"><span class="d">\u21b3 carried over${cf?" from "+(isMonthlyKey(cf)?"the "+shortDate(payOf(cf))+" slip":"w/c "+shortDate(cf)):""}</span>`+
+          cell("u", isU?"+"+fu(cU(key)):"+"+mny(cC(key)), isU?"+"+mny(cC(key)):"")+
+          `<span class="c"></span><span class="g"></span></div>`;
+    }
     if(warn){
       const rn = unit==="n" ? "night out or meal" : label.toLowerCase();
       ih+=`<button class="ratewarn" type="button">Hours agree but the money does not \u2014 `+
@@ -3730,10 +3838,10 @@ function renderPayslip(c){
       back.push(label+" "+(unit==="h"?n2(tk)+" h, ":"")+money(tp));
     }
     if(unit==="h"){
-      const gh=raw-e[key].units+tk;
+      const gh=raw-e[key].units-cU(key)+tk;
       if(Math.abs(gh)>=0.005) worst.push({label,gh,gp:gh*S(rateKey,pAt(k))});
     }else{
-      const gp=plActualCash(key,raw,k)-e[key].cash+(unit==="n"?tk*nightRate(pAt(k)):tk);
+      const gp=plActualCash(key,raw,k)-e[key].cash-cC(key)+(unit==="n"?tk*nightRate(pAt(k)):tk);
       if(Math.abs(gp)>=0.01) worst.push({label,gh:null,gp});
     }
   });
@@ -3987,13 +4095,17 @@ function offerBackup(){
   else { const d=load(); d.settings.backupAsked=iso(new Date()); save(); }
 }
 
-/* ---- check for updates (v1.1) ----
+/* ---- check for updates (v1.1, reworked v1.32) ----
    the service worker serves the cached copy first, and iOS home-screen apps
-   are slow to notice a new one, so an upload can sit unseen for days. this
-   does by hand what removing and re-adding the icon does, without touching
-   the hours or the receipts: drop the app's cached files, unregister the
-   worker, fetch the page fresh past every cache, and reload. the next open
-   registers a new worker from whatever is live. */
+   are slow to notice a new one. v1.31 threw the offline copy away and
+   reloaded every time — but the reload could still be answered from the
+   phone's own HTTP cache, so it sometimes came back on the old version, and
+   when the site itself was still serving the old one it said nothing useful.
+   now: ask the site which version it is serving, bypassing every cache. if
+   it is the one already running, say so plainly and change nothing. if it is
+   newer, refresh the phone's cached copies of the page and the worker from
+   the site first, then drop the offline copy and the worker, and reload.
+   after the reload the app checks it really landed on the new one. */
 async function checkForUpdates(){
   const btn=document.getElementById("updBtn"), msg=document.getElementById("updMsg");
   const say=t=>{ if(msg) msg.textContent=t; };
@@ -4001,20 +4113,36 @@ async function checkForUpdates(){
   say("Checking\u2026");
   try{
     if(!navigator.onLine){ say("No signal \u2014 try again when you have some."); if(btn) btn.disabled=false; return; }
-    /* make sure the server is reachable before throwing the offline copy away */
-    const r=await fetch("./index.html?fresh="+Date.now(),{cache:"reload"});
+    const r=await fetch("./index.html?fresh="+Date.now(),{cache:"no-store"});
     if(!r.ok) throw new Error("server said "+r.status);
     const txt=await r.text();
     const m=txt.match(/const BUILD="([^"]+)"/);
     const live=m?m[1]:null;
+    if(!live) throw new Error("no version in the page");
+    if(live===BUILD){
+      say("You are on "+BUILD+", the newest version the site is serving. If you have just uploaded a new one, the site can take a few minutes to start serving it \u2014 try again shortly.");
+      if(btn) btn.disabled=false;
+      return;
+    }
+    say("Updating to "+live+"\u2026");
+    /* the reload must not be answered from the phone's HTTP cache */
+    await Promise.all(["./","./index.html","./sw.js"].map(u=>fetch(u,{cache:"reload"}).catch(()=>{})));
     if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.filter(k=>/^hourbook-/.test(k)).map(k=>caches.delete(k))); }
     if(navigator.serviceWorker){ const regs=await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(g=>g.unregister())); }
-    say(live && live!==BUILD ? "Updating to "+live+"\u2026" : "You are on the latest ("+BUILD+"). Refreshing\u2026");
-    setTimeout(()=>location.replace(location.pathname+"?u="+Date.now()),600);
+    try{ sessionStorage.setItem("hourbook.want",live); }catch(e){}
+    setTimeout(()=>location.replace(location.pathname+"?u="+Date.now()),400);
   }catch(e){
     say("Could not reach the site just now. Nothing was changed \u2014 try again with signal.");
     if(btn) btn.disabled=false;
   }
+}
+/* after an update reload: did it actually land? */
+function updateLanded(){
+  let want=null;
+  try{ want=sessionStorage.getItem("hourbook.want"); sessionStorage.removeItem("hourbook.want"); }catch(e){}
+  if(!want) return;
+  if(want===BUILD) toast("Updated to "+BUILD+".");
+  else alert("Still on "+BUILD+" \u2014 the site has "+want+" but the phone kept its old copy. Tap Check for updates again.");
 }
 function download(name,text,type){
   const b=new Blob([text],{type:type||"text/plain"}), u=URL.createObjectURL(b);
@@ -5144,9 +5272,13 @@ document.getElementById("bhCheck").addEventListener("click",()=>{
    both are optional: if either is unavailable the app carries on. */
 if("serviceWorker" in navigator && location.protocol.startsWith("http")){
   window.addEventListener("load",()=>{
-    navigator.serviceWorker.register("./sw.js").catch(()=>{});
+    /* updateViaCache none: the phone must never answer the worker's own
+       update check from its HTTP cache */
+    navigator.serviceWorker.register("./sw.js",{updateViaCache:"none"})
+      .then(g=>{ try{ g.update(); }catch(e){} }).catch(()=>{});
   });
 }
+window.addEventListener("load",updateLanded);
 
 /* ============ v37: the setup screen ============
    one guided screen for three jobs: a brand new install, a new job (or a pay

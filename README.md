@@ -28,11 +28,11 @@ This file exists so a future conversation can pick the project up cold.
 **must be bumped together on every change.** The build number is shown in
 Settings → About.
 
-Current version: **v1.31**. The internal counter reached v38.1 and was then
+Current version: **v1.32**. The internal counter reached v38.1 and was then
 renumbered to **v1.0** for the public release — "38 is crazy". Going backwards
 is safe: phones compare the cache *name*, not the number, so `hourbook-v1.0`
 is simply a different cache from `hourbook-v38`. **From v1.0 on, bump by 0.1
-each release** (v1.1, v1.2, …).
+each release** (v1.1, v1.2, v1.3), and from v1.31 by the second decimal (v1.32, v1.33, …).
 
 Latest changes: see **"v38.1 → v1.0"** further down, just above "What v36 changed".
 
@@ -860,6 +860,43 @@ Tax, NI, pension and student loan are deliberately *not* era-aware. They are
 statutory, they already move with the tax year, and the real figures come off
 the slip. Changing jobs mid-year is a P45 matter and the app does not try to
 model it.
+
+## v1.32
+
+**Weekly rest payback fixed.** Weekly rests are now found as events: every
+break of 24 hours or more between a clock-out and the next clock-in, measured
+in real time (a clock change inside the break counts properly). A rest belongs
+to the week its clock-out falls in. The old code took the longest break
+touching each Monday-to-Monday window, so a full rest the weekend before could
+hide a reduced one, and a full rest the weekend after wiped the debt out.
+Engine: `weeklyRests()`, `wrDebts()`, `wrOwedAt(ms)`, `wrOfWeek(k)`,
+`longestBreakIn(k)`; `weeklyPayback`, `owedCarry` and `weeklyRestOf` are gone.
+Paid = a later single break of 45h + what is owed (strict, as before); one
+long break can clear several debts, oldest first, each only if the extra
+covers it whole. Deadline = end of the third week after the week it started in.
+
+**Weekly rest payback section** (`#dhPay`, `renderPayback()`) on the drivers'
+hours screen — only when something is owed. One line per reduced rest (week,
+dates, hours taken, amount, pay-back-by date, the single break that clears
+it), a total under them when there is more than one. Past its deadline it
+stays, red, as overdue, with a **Zero it out** button (`settings.wrZero`,
+keyed by the clock-out day). The Today pill also shows the total owed.
+
+**Carried-over payslip hours in the totals.** `plCarryOf(k)` gives what is
+carried into a period as still owed (not attendance). The Totals table shows
+it as its own "carried over from w/c …" row under its line, and it is added
+into paid hours, before tax, take home, the payday hero and the history gaps
+(`plTotals` now returns `carH`/`carPay` too). A slip that pays the carried
+hours now reads as matching instead of "over".
+
+**Check for updates.** It asks the site for its version past every cache
+(the service worker no longer answers `no-store`/`reload`/`?fresh=` requests
+from its offline copy — that was why it always looked up to date). Same
+version: says so and changes nothing (the site can take a few minutes after
+an upload). Newer: refreshes the phone's HTTP-cached page and worker, drops the
+offline copy and worker, reloads, then confirms "Updated to v1.32" or says it
+is still on the old one. `sw.js` fills its cache with `no-cache` fetches and is
+registered with `updateViaCache: "none"`.
 
 ## v1.31
 
