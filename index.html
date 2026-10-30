@@ -1035,7 +1035,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v1.34";
+const BUILD="v1.35";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -3579,15 +3579,23 @@ function renderPayslip(c){
     const unitTxt = n => unit==="h" ? n2(n)+" h" : (unit==="yn"||unit==="\u00a3") ? money(n) : String(n);
     /* a write-off has to be reversible — one stray tap otherwise drops a
        carried shortfall for good and the slip that pays it reads as "over". */
-    if(wroteOff && cin.owed>0){
+    /* v1.35: the undo sits on the week the hours went short — that is
+       where he looks for it. the write-off itself is stored on the week the
+       carry lands in, so look one period ahead for it. */
+    const nk=pnext(k), nwo=(pslot(nk).wo||{})[key];
+    const nci=nwo ? ((plCarryIn(nk)||{})[key]||{}) : {};
+    const woHere = !!nwo && nci.from===k && (nci.owed||0)>0;
+    const woShow = woHere ? {amt:nci.owed, wk:nk, txt:"short on this slip"}
+                 : (wroteOff && cin.owed>0 && cin.from!==pprev(k)) ? {amt:cin.owed, wk:k, txt:"from "+prettyDate(cin.from||k)} : null;
+    if(woShow){
       const su=document.createElement("div");
       su.className="strip woff";
-      su.innerHTML=`<div class="sl"><span class="sh">${unitTxt(cin.owed)}</span><span class="sd">from ${prettyDate(cin.from||k)} — <b>written off</b></span></div><div class="stot">no longer expected on this slip or carried on</div>`;
+      su.innerHTML=`<div class="sl"><span class="sh">${unitTxt(woShow.amt)}</span><span class="sd">${woShow.txt} — <b>written off</b></span></div><div class="stot">not carried on to later slips</div>`;
       const bar=document.createElement("div"); bar.className="oact";
       const bu=document.createElement("button");
       bu.className="wo full"; bu.textContent="undo write-off";
       bu.addEventListener("click",()=>{
-        const w=pslot(k,true);
+        const w=pslot(woShow.wk,true);
         if(w.wo){ delete w.wo[key]; if(!Object.keys(w.wo).length) delete w.wo; }
         save(); render();
       });
@@ -3596,7 +3604,7 @@ function renderPayslip(c){
     }
     const taken = locked ? 0 : plTaken(key,unit,raw,exp,cin);
     const backTxt = taken>0 ? unitTxt(taken)+" of it is the overpayment on your "+prettyDate(payOf(pprev(k)))+" slip being taken back" : "";
-    if(!locked && (owed>0 || cout.owed>0 || cout.credit>0 || taken>0)){
+    if(!locked && !woHere && (owed>0 || cout.owed>0 || cout.credit>0 || taken>0)){
       const st=document.createElement("div");
       let cls="strip", head="", body="", acts=true;
 
@@ -3648,7 +3656,8 @@ function renderPayslip(c){
         const bw=document.createElement("button");
         bw.className="wo"; bw.textContent="write off";
         bw.addEventListener("click",()=>{
-          const w=pslot(k,true); w.wo=w.wo||{}; w.wo[key]=1; save(); render();
+          const wk = (owed>0) ? k : nk;   /* carried in: this week. went short here: next week */
+          const w=pslot(wk,true); w.wo=w.wo||{}; w.wo[key]=1; save(); render();
         });
         bar.appendChild(bw);
         st.appendChild(bar);
