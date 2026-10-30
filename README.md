@@ -28,7 +28,7 @@ This file exists so a future conversation can pick the project up cold.
 **must be bumped together on every change.** The build number is shown in
 Settings → About.
 
-Current version: **v1.33**. The internal counter reached v38.1 and was then
+Current version: **v1.34**. The internal counter reached v38.1 and was then
 renumbered to **v1.0** for the public release — "38 is crazy". Going backwards
 is safe: phones compare the cache *name*, not the number, so `hourbook-v1.0`
 is simply a different cache from `hourbook-v38`. **From v1.0 on, bump by 0.1
@@ -861,12 +861,24 @@ statutory, they already move with the tax year, and the real figures come off
 the slip. Changing jobs mid-year is a P45 matter and the app does not try to
 model it.
 
+## v1.34
+
+Same as v1.33 below, re-versioned so phones that already took the first v1.33 upload still pick up the earliest-start fix.
+
 ## v1.33
 
 **Undo write-off.** A carried shortfall that has been written off now shows
 as a grey "written off" strip under its payslip line, with an **undo
 write-off** button that removes `wo[key]` for that week. Before this a stray
 tap dropped the carry for good, and the slip that paid it read as "over".
+
+**Earliest start after the shift that uses the last reduction.** The open
+rest after a 15-hour shift was being counted against itself, so with one
+reduced rest left the app showed "no reduced left" and a dash for the full
+rest, with no start time at all. `reducedSinceWeekly(ds, true)` now leaves
+the rest he is currently in out of the count for the start-time row and the
+clock-in check, so it offers the 9-hour start. Once he clocks in, it shows
+none left.
 
 ## v1.32
 
