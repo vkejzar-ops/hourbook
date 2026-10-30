@@ -1035,7 +1035,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v1.35";
+const BUILD="v1.36";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -3582,10 +3582,14 @@ function renderPayslip(c){
     /* v1.35: the undo sits on the week the hours went short — that is
        where he looks for it. the write-off itself is stored on the week the
        carry lands in, so look one period ahead for it. */
-    const nk=pnext(k), nwo=(pslot(nk).wo||{})[key];
-    const nci=nwo ? ((plCarryIn(nk)||{})[key]||{}) : {};
-    const woHere = !!nwo && nci.from===k && (nci.owed||0)>0;
-    const woShow = woHere ? {amt:nci.owed, wk:nk, txt:"short on this slip"}
+    const nk=pnext(k);
+    const woK=!!((pslot(k).wo||{})[key]), woN=!!((pslot(nk).wo||{})[key]);
+    /* v1.36: a write-off tapped on the short week itself is stored there
+       (older builds did that), on the next week by v1.35 — either way it
+       wipes the carry, so judge "went short" from the slip, not the carry. */
+    const shortBy = (unit!=="yn" && raw!==null && exp) ? Math.round((exp.units-raw)*100)/100 : 0;
+    const woHere = shortBy>0 && !(cin.owed>0) && (woK||woN);
+    const woShow = woHere ? {amt:shortBy, wk:null, txt:"short on this slip"}
                  : (wroteOff && cin.owed>0 && cin.from!==pprev(k)) ? {amt:cin.owed, wk:k, txt:"from "+prettyDate(cin.from||k)} : null;
     if(woShow){
       const su=document.createElement("div");
@@ -3595,8 +3599,10 @@ function renderPayslip(c){
       const bu=document.createElement("button");
       bu.className="wo full"; bu.textContent="undo write-off";
       bu.addEventListener("click",()=>{
-        const w=pslot(woShow.wk,true);
-        if(w.wo){ delete w.wo[key]; if(!Object.keys(w.wo).length) delete w.wo; }
+        (woShow.wk ? [woShow.wk] : [k,nk]).forEach(x=>{
+          const w=pslot(x,true);
+          if(w.wo){ delete w.wo[key]; if(!Object.keys(w.wo).length) delete w.wo; }
+        });
         save(); render();
       });
       bar.appendChild(bu); su.appendChild(bar);
