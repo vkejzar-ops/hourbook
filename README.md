@@ -28,7 +28,7 @@ This file exists so a future conversation can pick the project up cold.
 **must be bumped together on every change.** The build number is shown in
 Settings → About.
 
-Current version: **v1.36**. The internal counter reached v38.1 and was then
+Current version: **v1.37**. The internal counter reached v38.1 and was then
 renumbered to **v1.0** for the public release — "38 is crazy". Going backwards
 is safe: phones compare the cache *name*, not the number, so `hourbook-v1.0`
 is simply a different cache from `hourbook-v38`. **From v1.0 on, bump by 0.1
@@ -860,6 +860,18 @@ Tax, NI, pension and student loan are deliberately *not* era-aware. They are
 statutory, they already move with the tax year, and the real figures come off
 the slip. Changing jobs mid-year is a P45 matter and the app does not try to
 model it.
+
+## v1.37
+
+**A write-off only drops what its own week leaves owed.** `wo[key]` on a week
+now means "drop whatever is still owed on this line going OUT of this week".
+What was carried in still counts against that week's slip, so if the slip
+pays 14 of 14.5 carried hours, writing off there drops just the 0.5. The
+written-off part is no longer expected (`plCarryOf` takes it off), the
+"written off" strip and its **undo write-off** show on the week it was pressed
+on, and undo only touches that week. Tapping "write off" always stores it on
+the week you are looking at. A blank slip line on a written-off week no longer
+lets the carry roll on.
 
 ## v1.36
 

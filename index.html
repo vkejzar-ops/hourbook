@@ -1035,7 +1035,7 @@ const DEFAULTS = {
 };
 
 /* ============ storage ============ */
-const BUILD="v1.36";
+const BUILD="v1.37";
 const KEY="hourbook.v1";
 let mem=null, memOnly=false;
 function load(){
@@ -2036,9 +2036,14 @@ function plGapSource(k,c){
    "paid twice" route and is never carried as a line figure. */
 function plCarryOf(k){
   const cin=plCarryIn(k), wo=pslot(k).wo||{}, out={};
+  let raw=null;
   plLines(k).forEach(([key,,unit,rateKey])=>{
-    const ci=cin[key]||{}, o=ci.owed||0;
-    if(!(o>0) || wo[key] || unit==="yn") return;
+    const ci=cin[key]||{};
+    let o=ci.owed||0;
+    if(!(o>0) || unit==="yn") return;
+    /* v1.37: the part written off on this week is no longer expected */
+    if(wo[key]){ raw=raw||plStep(k,cin,true)||{}; o=Math.max(0,o-((raw[key]||{}).owed||0)); }
+    if(!(o>0.0001)) return;
     const cash = unit==="h" ? o*S(rateKey,pAt(k)) : unit==="n" ? o*nightRate(pAt(k)) : o;
     out[key]={units:(unit==="h"||unit==="n")?o:0, cash, from:ci.from||null};
   });
@@ -2154,8 +2159,8 @@ function plCarryIn(k){
 
 /* one week's effect on the ledger. takes what was owed coming in,
    returns what is owed going out. */
-function plStep(w,inSt){
-  const wk=pslot(w), p=wk.payslip||{}, wo=wk.wo||{}, chk=wk.chk||{};
+function plStep(w,inSt,noWo){
+  const wk=pslot(w), p=wk.payslip||{}, wo=noWo?{}:(wk.wo||{}), chk=wk.chk||{};
   const out={};
   /* an unpaid week carries no slip, so it says nothing about a debt. it
      passes shortfalls through untouched and lets any credit lapse. */
@@ -2170,9 +2175,12 @@ function plStep(w,inSt){
     let owed = inn.owed, from = inn.from, ref = inn.ref || null;
     const credit = inn.credit;
 
-    /* a write-off wipes whatever was outstanding as at this week */
-    if(wo[key]){ owed=0; from=null; ref=null; }
+    /* v1.37: a write-off only drops what is left owed going OUT of the week
+       it was pressed on — what was carried in still counts against this
+       week's slip, so a slip that pays most of it leaves just the remainder
+       to write off. */
     if(locked){
+      if(wo[key]){ owed=0; from=null; ref=null; }
       if(owed>0) out[key]={owed, from, credit:0, ref};
       return;
     }
@@ -2196,7 +2204,7 @@ function plStep(w,inSt){
       const raw = num(p[key]);
       let val = raw;
       if(unit==="n" && raw===null && chk.nights) val=target;   /* ticked = checked and agrees */
-      if(val===null){ if(owed>0) out[key]={owed,from,credit:0,ref}; return; }
+      if(val===null){ if(owed>0 && !wo[key]) out[key]={owed,from,credit:0,ref}; return; }
 
       const grace = plGrace(key, cw ? cw.daysWorked : 0, cw ? cw.roundStep : undefined, cw ? cw.roundDir : undefined);
       const diff = val - target;
@@ -3445,7 +3453,7 @@ function renderPayslip(c){
        here as well as downstream — otherwise the strip he just dismissed
        sits there until the week rolls over. */
     const wroteOff=!!((pslot(k).wo||{})[key]);
-    const owed=wroteOff?0:cin.owed, credit=cin.credit;
+    const owed=cin.owed, credit=cin.credit;
     const row=document.createElement("div");
     row.className="pl"+(raw===null?"":" has");
     if(unit==="n"){
@@ -3579,30 +3587,21 @@ function renderPayslip(c){
     const unitTxt = n => unit==="h" ? n2(n)+" h" : (unit==="yn"||unit==="\u00a3") ? money(n) : String(n);
     /* a write-off has to be reversible — one stray tap otherwise drops a
        carried shortfall for good and the slip that pays it reads as "over". */
-    /* v1.35: the undo sits on the week the hours went short — that is
-       where he looks for it. the write-off itself is stored on the week the
-       carry lands in, so look one period ahead for it. */
-    const nk=pnext(k);
-    const woK=!!((pslot(k).wo||{})[key]), woN=!!((pslot(nk).wo||{})[key]);
-    /* v1.36: a write-off tapped on the short week itself is stored there
-       (older builds did that), on the next week by v1.35 — either way it
-       wipes the carry, so judge "went short" from the slip, not the carry. */
-    const shortBy = (unit!=="yn" && raw!==null && exp) ? Math.round((exp.units-raw)*100)/100 : 0;
-    const woHere = shortBy>0 && !(cin.owed>0) && (woK||woN);
-    const woShow = woHere ? {amt:shortBy, wk:null, txt:"short on this slip"}
-                 : (wroteOff && cin.owed>0 && cin.from!==pprev(k)) ? {amt:cin.owed, wk:k, txt:"from "+prettyDate(cin.from||k)} : null;
-    if(woShow){
+    /* v1.37: a write-off belongs to the week it was pressed on and drops
+       only what that week leaves owed, so the strip and its undo live there. */
+    const rawOut = wroteOff ? ((plStep(k,carryIn,true)||{})[key]||plBlank()) : cout;
+    const woHere = wroteOff && rawOut.owed>0;
+    if(woHere){
       const su=document.createElement("div");
       su.className="strip woff";
-      su.innerHTML=`<div class="sl"><span class="sh">${unitTxt(woShow.amt)}</span><span class="sd">${woShow.txt} — <b>written off</b></span></div><div class="stot">not carried on to later slips</div>`;
+      const what = owed>0 ? (rawOut.owed<owed ? "still owed of the "+unitTxt(owed)+" from "+prettyDate(cin.from||k) : "owed from "+prettyDate(cin.from||k)) : "short on this slip";
+      su.innerHTML=`<div class="sl"><span class="sh">${unitTxt(rawOut.owed)}</span><span class="sd">${what} — <b>written off</b></span></div><div class="stot">not carried on to later slips</div>`;
       const bar=document.createElement("div"); bar.className="oact";
       const bu=document.createElement("button");
       bu.className="wo full"; bu.textContent="undo write-off";
       bu.addEventListener("click",()=>{
-        (woShow.wk ? [woShow.wk] : [k,nk]).forEach(x=>{
-          const w=pslot(x,true);
-          if(w.wo){ delete w.wo[key]; if(!Object.keys(w.wo).length) delete w.wo; }
-        });
+        const w=pslot(k,true);
+        if(w.wo){ delete w.wo[key]; if(!Object.keys(w.wo).length) delete w.wo; }
         save(); render();
       });
       bar.appendChild(bu); su.appendChild(bar);
@@ -3662,8 +3661,7 @@ function renderPayslip(c){
         const bw=document.createElement("button");
         bw.className="wo"; bw.textContent="write off";
         bw.addEventListener("click",()=>{
-          const wk = (owed>0) ? k : nk;   /* carried in: this week. went short here: next week */
-          const w=pslot(wk,true); w.wo=w.wo||{}; w.wo[key]=1; save(); render();
+          const w=pslot(k,true); w.wo=w.wo||{}; w.wo[key]=1; save(); render();
         });
         bar.appendChild(bw);
         st.appendChild(bar);
@@ -5160,7 +5158,7 @@ document.getElementById("plAll").addEventListener("click",()=>{
   w.payslip=w.payslip||{};
   plLines(k).forEach(([key,,unit])=>{
     if(num(w.payslip[key])!==null) return;          /* typed by hand — leave it */
-    const owed=(((w.wo||{})[key]) ? 0 : ((carryIn[key]||{}).owed||0));
+    const owed=((carryIn[key]||{}).owed||0);
     if(unit==="n"){ w.chk=w.chk||{}; w.chk.nights=1; return; }
     if(unit==="yn"){ w.payslip[key]=String(e[key].units?1:0); return; }
     w.payslip[key]=n2(unit==="h" ? e[key].units+owed : e[key].cash+owed);
